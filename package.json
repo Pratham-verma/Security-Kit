@@ -17,7 +17,7 @@
     "build:site": "npm run build -w @seckit/core && node packages/ui/scripts/build-app.mjs && npm run build -w @seckit/site"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

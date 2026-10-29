@@ -1,0 +1,240 @@
+id: ai_feature
+name: AI / LLM feature
+description: Features built on large language models — chat, summarization, RAG over documents, tool-calling agents.
+order: 100
+question: Does the app use an LLM or AI model (chatbot, summaries, RAG, agents)?
+platforms: [web, backend, android, ios]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    capabilities:
+      title: What can the AI feature do?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [chat, rag, tools, agent]
+    provider:
+      title: Is the model a hosted API or self-hosted?
+      enum: [hosted_api, self_hosted]
+
+threats:
+  - id: AI-T1
+    title: Prompt injection (direct, or indirect through documents, emails and web pages)
+    stride: [S, T, E]
+    cwe: [CWE-1427]
+
+  - id: AI-T2
+    title: Sensitive information disclosure through model output
+    stride: [I]
+    cwe: [CWE-200]
+
+  - id: AI-T3
+    title: Improper output handling (XSS, injection or code execution via model output)
+    stride: [T, E]
+    cwe: [CWE-79, CWE-94]
+
+  - id: AI-T4
+    title: Excessive agency — tools with too much power take harmful actions
+    stride: [E]
+    cwe: [CWE-269]
+    when:
+      capabilities: [tools, agent]
+
+  - id: AI-T5
+    title: System prompt leakage exposes secrets or internal logic
+    stride: [I]
+    cwe: [CWE-200]
+
+  - id: AI-T6
+    title: RAG returns documents the user may not see, or poisoned content
+    stride: [I, T]
+    cwe: [CWE-284]
+    when:
+      capabilities: [rag]
+
+  - id: AI-T7
+    title: Unbounded consumption (denial of service and denial of wallet)
+    stride: [D]
+    cwe: [CWE-770]
+
+  - id: AI-T8
+    title: Model provider API key extracted from the client app
+    stride: [I, S]
+    cwe: [CWE-798]
+    when:
+      provider: [hosted_api]
+
+controls:
+  - id: AI-C1
+    title: Treat model input as untrusted; enforce security outside the model
+    mitigates: [AI-T1]
+    severity: critical
+    level: 1
+    standards:
+      owasp_llm_top10: [LLM01]
+      cwe: [CWE-1427]
+    guidance: |
+      Prompt instructions are not a security boundary. Keep system instructions separate from
+      user and retrieved content, mark external content as data, and enforce authorization,
+      data access and business rules in code — never by telling the model what not to do.
+      Add input/output guardrails for known injection patterns as defense in depth.
+    ai_rule: >-
+      Never rely on prompt instructions for security: enforce authorization and business rules
+      in code around the LLM call, and pass user/retrieved content as clearly delimited data.
+    verify:
+      - type: test
+        description: An "ignore previous instructions" payload cannot reach data or actions the user lacks access to.
+
+  - id: AI-C2
+    title: Treat model output as untrusted input
+    mitigates: [AI-T3]
+    severity: critical
+    level: 1
+    standards:
+      owasp_llm_top10: [LLM05]
+      owasp_top10: [A03]
+      cwe: [CWE-79, CWE-94]
+    guidance: |
+      Encode or sanitize output before rendering (no raw HTML from Markdown, no `innerHTML`),
+      use parameterized queries if output feeds a database, and never `eval`/execute generated
+      code outside a sandbox. Validate structured output against a schema.
+    ai_rule: >-
+      Treat LLM output as untrusted: sanitize before rendering (no innerHTML or raw-HTML
+      Markdown), validate structured output with a schema, and never eval or execute it
+      outside a sandbox.
+    implement:
+      web: sanitizeHtml() before rendering model output as HTML
+    verify:
+      - type: test
+        description: Model output containing <img onerror> is rendered inert.
+
+  - id: AI-C3
+    title: Least-privilege tools with human approval for impactful actions
+    mitigates: [AI-T4, AI-T1]
+    severity: critical
+    level: 1
+    when:
+      capabilities: [tools, agent]
+    standards:
+      owasp_llm_top10: [LLM06]
+      cwe: [CWE-269]
+    guidance: |
+      Give the model narrow, purpose-built tools (not generic shell, SQL or HTTP), run them
+      with the *end user's* permissions, validate tool arguments, and require explicit user
+      confirmation for destructive, financial or externally visible actions.
+    ai_rule: >-
+      LLM tools must be narrow and purpose-built (no generic shell/SQL/HTTP), run with the end
+      user's permissions, validate arguments, and require user confirmation for destructive,
+      financial or outbound actions.
+    verify:
+      - type: manual
+        description: Each tool is reviewed for scope; impactful tools have a confirmation step.
+
+  - id: AI-C4
+    title: Keep secrets and other users' data out of prompts
+    mitigates: [AI-T5, AI-T2]
+    severity: high
+    level: 1
+    standards:
+      owasp_llm_top10: [LLM07, LLM02]
+      cwe: [CWE-200]
+    guidance: Assume the system prompt and everything in the context window can be extracted. Never include credentials, internal URLs or data the current user may not see.
+    ai_rule: >-
+      Never put API keys, credentials, or data the current user is not authorized to see into
+      prompts or system prompts; assume all prompt content can be extracted.
+    verify:
+      - type: manual
+        description: System prompts and context builders contain no secrets or cross-user data.
+
+  - id: AI-C5
+    title: Enforce permissions at retrieval time and vet ingested sources
+    mitigates: [AI-T6]
+    severity: high
+    level: 1
+    platforms: [backend]
+    when:
+      capabilities: [rag]
+    standards:
+      owasp_llm_top10: [LLM08, LLM04]
+      owasp_top10: [A01]
+      cwe: [CWE-284]
+    guidance: Filter the vector search by the requesting user's tenant/ACL before results reach the model, and only ingest content from vetted sources.
+    ai_rule: >-
+      RAG retrieval must filter by the current user's tenant and permissions inside the vector
+      query, before any content reaches the model.
+    verify:
+      - type: test
+        description: A user's question cannot retrieve another tenant's documents.
+
+  - id: AI-C6
+    title: Rate limits, token limits and spending caps
+    mitigates: [AI-T7]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      owasp_llm_top10: [LLM10]
+      owasp_api_top10: [API4]
+      cwe: [CWE-770]
+    guidance: Limit requests per user, cap input and output tokens, set timeouts, and configure budget alerts and hard spending limits with the provider.
+    ai_rule: >-
+      Every LLM call must have per-user rate limiting, max input/output token limits and a
+      timeout.
+    verify:
+      - type: test
+        description: Exceeding the per-user LLM quota returns 429.
+
+  - id: AI-C7
+    title: Minimize and protect data sent to hosted model providers
+    mitigates: [AI-T2]
+    severity: medium
+    level: 2
+    when:
+      provider: [hosted_api]
+    standards:
+      owasp_llm_top10: [LLM02]
+      cwe: [CWE-359]
+    guidance: Send only what the feature needs, redact personal data where possible, use a provider agreement with no training on your data and limited retention, and tell users.
+    ai_rule: Send the minimum data needed to the model provider and redact personal data that the feature does not need.
+    verify:
+      - type: manual
+        description: Provider data-retention terms are reviewed and documented.
+
+  - id: AI-C8
+    title: Call the model from the backend only
+    mitigates: [AI-T8]
+    severity: critical
+    level: 1
+    platforms: [web, android, ios]
+    when:
+      provider: [hosted_api]
+    standards:
+      owasp_llm_top10: [LLM10]
+      owasp_top10: [A07]
+      cwe: [CWE-798]
+    guidance: Model provider keys never ship to browsers or mobile apps; clients call your backend, which authenticates the user, applies limits, and calls the provider.
+    ai_rule: >-
+      Never call the LLM provider directly from frontend or mobile code with an API key; route
+      every call through the backend.
+    verify:
+      - type: semgrep
+        description: No LLM SDK imports or provider API keys in client code.
+
+  - id: AI-C9
+    title: Log AI interactions and tool calls for audit
+    mitigates: [AI-T1]
+    severity: medium
+    level: 2
+    platforms: [backend]
+    standards:
+      owasp_llm_top10: [LLM01, LLM06]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: Record prompts, tool calls and outcomes (with redaction) so abuse and injection attempts can be detected and investigated.
+    ai_rule: Log every LLM tool call (tool name, arguments with secrets redacted, user ID, outcome).
+    verify:
+      - type: manual
+        description: Tool invocations appear in the audit log.

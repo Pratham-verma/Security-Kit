@@ -1,0 +1,51 @@
+{
+  "name": "@seckit/cli",
+  "version": "0.1.0",
+  "description": "Security Kit CLI: describe your app, get a tailored security plan and AI coding rules.",
+  "keywords": [
+    "security",
+    "owasp",
+    "audit",
+    "semgrep",
+    "cli",
+    "checklist"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "seckit": "./dist/bin.js"
+  },
+  "exports": {
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    },
+    "./package.json": "./package.json",
+    "./bin": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@seckit/core": "0.1.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.5"
+  }
+}

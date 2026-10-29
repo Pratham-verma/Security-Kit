@@ -1,0 +1,242 @@
+id: payments
+name: Payments
+description: Taking payments — card checkout, wallets, subscriptions or in-app purchases.
+order: 60
+question: Does the app take payments (cards, wallets, subscriptions, in-app purchases)?
+platforms: [web, backend, android, ios]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    provider:
+      title: Which payment provider?
+      enum: [stripe, paypal, braintree, adyen, razorpay, square, app_store_iap, google_play_billing, other]
+    integration:
+      title: How are card details collected?
+      enum: [hosted_checkout, embedded_fields, direct_api]
+    webhooks:
+      title: Does the backend receive payment webhooks?
+      type: boolean
+      default: true
+
+threats:
+  - id: PAY-T1
+    title: Raw card data handled by your own servers
+    description: Card numbers touch your systems, putting the whole app in PCI DSS scope and at risk of breach.
+    stride: [I]
+    cwe: [CWE-311]
+    when:
+      integration: [direct_api]
+
+  - id: PAY-T2
+    title: Forged payment webhooks mark unpaid orders as paid
+    stride: [S, T]
+    cwe: [CWE-345]
+    when:
+      webhooks: [true]
+
+  - id: PAY-T3
+    title: Price or amount tampering by the client
+    stride: [T]
+    cwe: [CWE-602, CWE-472]
+
+  - id: PAY-T4
+    title: Double fulfilment from retries, replays or race conditions
+    stride: [T, R]
+    cwe: [CWE-362]
+
+  - id: PAY-T5
+    title: Payment-page script tampering (Magecart-style skimming)
+    stride: [T, I]
+    cwe: [CWE-829]
+    when:
+      integration: [embedded_fields, direct_api]
+
+  - id: PAY-T6
+    title: Card testing (carding) through the checkout
+    stride: [S, D]
+    cwe: [CWE-799]
+
+  - id: PAY-T7
+    title: Forged in-app purchase receipts unlock paid features
+    stride: [S, T]
+    cwe: [CWE-345, CWE-602]
+    when:
+      provider: [app_store_iap, google_play_billing]
+
+  - id: PAY-T8
+    title: Card data leaked through logs, analytics or databases
+    stride: [I]
+    cwe: [CWE-532]
+
+controls:
+  - id: PAY-C1
+    title: Use hosted checkout or provider fields so card data never touches your servers
+    mitigates: [PAY-T1]
+    severity: critical
+    level: 1
+    when:
+      integration: [direct_api]
+    standards:
+      pci_dss: [3.3.1, 3.5.1]
+      owasp_top10: [A02]
+      cwe: [CWE-311]
+    guidance: |
+      Move to the provider's hosted checkout or hosted/embedded fields with tokenization. If
+      you really must handle card data, you are in full PCI DSS scope (SAQ D): never store
+      sensitive authentication data (CVV, PIN, track data) and render stored PANs unreadable.
+    ai_rule: >-
+      Never send raw card numbers or CVV to our servers; collect them only with the payment
+      provider's hosted checkout or hosted fields and work with provider tokens.
+    verify:
+      - type: semgrep
+        description: No request handlers read card_number / cvv / cvc fields.
+
+  - id: PAY-C2
+    title: Never log or store card data; keep only provider tokens and the last 4 digits
+    mitigates: [PAY-T8]
+    severity: high
+    level: 1
+    standards:
+      pci_dss: [3.3.1, 3.4.1]
+      asvs: [V7.1.1]
+      owasp_top10: [A09]
+      cwe: [CWE-532]
+    guidance: Store provider customer/payment-method IDs and display data only (brand, last 4, expiry month/year).
+    ai_rule: >-
+      Never log, persist or send to analytics any card number, CVV or full payment payload;
+      store only provider IDs plus brand and last 4 digits.
+    verify:
+      - type: manual
+        description: Logs and analytics events from a test checkout contain no card data.
+
+  - id: PAY-C3
+    title: Verify webhook signatures and process each event once
+    mitigates: [PAY-T2, PAY-T4]
+    severity: critical
+    level: 1
+    platforms: [backend]
+    when:
+      webhooks: [true]
+    standards:
+      owasp_api_top10: [API10]
+      owasp_top10: [A08]
+      cwe: [CWE-345, CWE-347]
+    guidance: |
+      Verify the signature with the provider's SDK against the **raw** request body and the
+      webhook secret, reject old timestamps, store processed event IDs to ignore duplicates,
+      and when in doubt fetch the object from the provider's API instead of trusting the payload.
+    ai_rule: >-
+      Payment webhooks must verify the provider signature on the raw request body with the
+      webhook secret, reject stale timestamps, and ignore event IDs that were already processed.
+    implement:
+      node: verifyWebhookSignature() (Stripe-compatible t=,v1= scheme) — or your provider SDK
+    verify:
+      - type: test
+        description: A webhook with an invalid signature returns 400 and changes nothing.
+
+  - id: PAY-C4
+    title: Compute amounts on the server and verify them before fulfilment
+    mitigates: [PAY-T3]
+    severity: critical
+    level: 1
+    platforms: [backend]
+    standards:
+      owasp_top10: [A04]
+      cwe: [CWE-602, CWE-472]
+    guidance: |
+      Clients send only item IDs and quantities. The server computes the price from its own
+      catalog (including discounts and tax), creates the payment, and before fulfilling checks
+      that the paid amount and currency match the order.
+    ai_rule: >-
+      Never accept prices, totals or currency from the client; compute amounts on the server
+      from the catalog and verify the paid amount and currency before fulfilling an order.
+    verify:
+      - type: test
+        description: Changing the price in the checkout request does not change the charged amount.
+
+  - id: PAY-C5
+    title: Idempotent payment and fulfilment operations
+    mitigates: [PAY-T4]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      owasp_top10: [A04]
+      cwe: [CWE-362]
+    guidance: |
+      Use idempotency keys when creating charges, and make fulfilment atomic (transaction or
+      unique constraint on the payment ID) so retries and concurrent webhooks cannot fulfil twice.
+    ai_rule: >-
+      Create charges with idempotency keys and make order fulfilment idempotent (unique
+      constraint or transaction on the payment ID) so it can never run twice.
+    verify:
+      - type: test
+        description: Delivering the same payment-succeeded event twice concurrently fulfils once.
+
+  - id: PAY-C6
+    title: Control and monitor scripts on payment pages
+    mitigates: [PAY-T5]
+    severity: high
+    level: 1
+    platforms: [web]
+    when:
+      integration: [embedded_fields, direct_api]
+    standards:
+      pci_dss: [6.4.3, 11.6.1]
+      asvs: [V14.4.3, V14.2.3]
+      owasp_top10: [A08]
+      cwe: [CWE-829, CWE-353]
+    guidance: |
+      Keep an inventory of every script on payment pages with a justification, restrict them
+      with a strict CSP, use Subresource Integrity for third-party scripts, and detect
+      unauthorized changes to the page and its headers.
+    ai_rule: >-
+      Do not add third-party scripts to checkout pages; payment pages use a strict CSP and
+      Subresource Integrity for every external script.
+    verify:
+      - type: test
+        description: Checkout responses carry a CSP without unsafe-inline/unsafe-eval for scripts.
+
+  - id: PAY-C7
+    title: Throttle and screen payment attempts against card testing
+    mitigates: [PAY-T6]
+    severity: medium
+    level: 1
+    platforms: [backend]
+    standards:
+      owasp_api_top10: [API6]
+      owasp_top10: [A04]
+      cwe: [CWE-799]
+    guidance: |
+      Rate-limit payment attempts per account, IP and card fingerprint, enable the provider's
+      fraud screening, and add CAPTCHA or require login after repeated declines.
+    ai_rule: >-
+      Rate-limit payment and card-setup attempts per user, IP and card fingerprint, and keep
+      the provider's fraud screening enabled.
+    verify:
+      - type: test
+        description: Repeated declined attempts trigger throttling.
+
+  - id: PAY-C8
+    title: Validate in-app purchase receipts on the server
+    mitigates: [PAY-T7]
+    severity: critical
+    level: 1
+    platforms: [backend]
+    when:
+      provider: [app_store_iap, google_play_billing]
+    standards:
+      owasp_top10: [A04]
+      cwe: [CWE-345, CWE-602]
+    guidance: |
+      Verify purchases with the App Store Server API / Google Play Developer API from your
+      backend, grant entitlements server-side, and handle refunds and revocations via server
+      notifications. Never trust a "purchased" flag sent by the app.
+    ai_rule: >-
+      Grant paid features only after the backend verifies the purchase with Apple's or
+      Google's server API; never trust purchase status reported by the app.
+    verify:
+      - type: test
+        description: A fabricated receipt does not unlock premium features.

@@ -1,0 +1,38 @@
+{
+  "name": "seckit",
+  "version": "0.1.0",
+  "description": "Security Kit: describe your app, get the security it needs — a tailored checklist, an AI prompt, and a code scan mapped to OWASP ASVS, MASVS, Top 10, PCI DSS and CWE.",
+  "keywords": [
+    "security",
+    "owasp",
+    "asvs",
+    "masvs",
+    "checklist",
+    "ai",
+    "claude-code",
+    "cursor",
+    "copilot",
+    "semgrep"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "seckit": "./bin.js"
+  },
+  "files": [
+    "bin.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@seckit/cli": "0.1.0",
+    "@seckit/ui": "0.1.0"
+  }
+}

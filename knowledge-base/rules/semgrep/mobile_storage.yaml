@@ -1,0 +1,168 @@
+rules:
+  - id: seckit.mstore-c1.token-in-asyncstorage
+    message: "AsyncStorage is unencrypted. Store tokens with react-native-keychain or expo-secure-store."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [MSTORE-C1]
+      cwe: CWE-312
+    patterns:
+      - pattern-either:
+          - pattern: AsyncStorage.setItem($K, ...)
+          - pattern: AsyncStorage.multiSet(...)
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(token|jwt|auth|session|secret|password|credential)
+
+  - id: seckit.mstore-c1.token-in-shared-preferences
+    message: "SharedPreferences is plaintext. Encrypt with an Android Keystore key (e.g. Tink) or keep tokens out of preferences."
+    severity: ERROR
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [MSTORE-C1]
+      cwe: CWE-312
+    patterns:
+      - pattern: $E.putString($K, $V)
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(token|jwt|auth|session|secret|password|credential)
+
+  - id: seckit.mstore-c1.token-in-userdefaults
+    message: "UserDefaults is plaintext and backed up. Store tokens in the Keychain."
+    severity: ERROR
+    languages: [swift]
+    metadata:
+      seckit-controls: [MSTORE-C1]
+      cwe: CWE-312
+    patterns:
+      - pattern: "UserDefaults.standard.set($V, forKey: $K)"
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(token|jwt|auth|session|secret|password|credential)
+
+  - id: seckit.mstore-c3.android-sensitive-log
+    message: "Sensitive value written to the device log (readable by other tools and in bug reports)."
+    severity: WARNING
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [MSTORE-C3]
+      cwe: CWE-532
+    patterns:
+      - pattern: Log.$M($TAG, $MSG, ...)
+      - metavariable-regex:
+          metavariable: $MSG
+          regex: (?i).*(token|password|secret|jwt|otp|credential)
+
+  - id: seckit.mstore-c6.kotlin-hardcoded-key
+    message: "Encryption key or IV hardcoded in the app. Generate keys in the Android Keystore."
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      seckit-controls: [MSTORE-C6]
+      cwe: CWE-321
+    pattern-either:
+      - pattern: SecretKeySpec("...".toByteArray(...), ...)
+      - pattern: IvParameterSpec("...".toByteArray(...))
+
+  - id: seckit.mstore-c6.java-hardcoded-key
+    message: "Encryption key or IV hardcoded in the app. Generate keys in the Android Keystore."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [MSTORE-C6]
+      cwe: CWE-321
+    pattern-either:
+      - pattern: new SecretKeySpec("...".getBytes(...), ...)
+      - pattern: new IvParameterSpec("...".getBytes(...))
+
+  - id: seckit.mstore-c1.swift-keychain-accessible-always
+    message: "kSecAttrAccessibleAlways makes Keychain items readable while the device is locked. Use kSecAttrAccessibleWhenUnlockedThisDeviceOnly."
+    severity: ERROR
+    languages: [swift]
+    metadata:
+      seckit-controls: [MSTORE-C1]
+      cwe: CWE-922
+    pattern-regex: |-
+      \bkSecAttrAccessibleAlways(ThisDeviceOnly)?\b
+
+  - id: seckit.mstore-c2.swift-file-protection-disabled
+    message: "File written without data protection. Use .completeFileProtection for sensitive files."
+    severity: ERROR
+    languages: [swift]
+    metadata:
+      seckit-controls: [MSTORE-C2]
+      cwe: CWE-311
+    pattern-regex: |-
+      \.noFileProtection\b|\bNSFileProtectionNone\b|FileProtectionType\.none\b
+
+  - id: seckit.mstore-c3.swift-sensitive-log
+    message: "Sensitive value written to the device log."
+    severity: WARNING
+    languages: [swift]
+    metadata:
+      seckit-controls: [MSTORE-C3]
+      cwe: CWE-532
+    pattern-regex: |-
+      (?i)\b(print|debugPrint|NSLog|os_log)\s*\([^)\n]*(token|password|secret|jwt|otp)
+
+  - id: seckit.mstore-c6.swift-hardcoded-key
+    message: "Encryption key hardcoded in the app. Generate keys in the Secure Enclave or Keychain."
+    severity: ERROR
+    languages: [swift]
+    metadata:
+      seckit-controls: [MSTORE-C6]
+      cwe: CWE-321
+    pattern-regex: |-
+      SymmetricKey\(data:\s*(Data\()?"[^"]*"
+
+  - id: seckit.mstore-c1.dart-token-in-shared-preferences
+    message: "shared_preferences / GetStorage are plaintext. Store tokens with flutter_secure_storage (Keychain / Keystore)."
+    severity: ERROR
+    languages: [dart]
+    metadata:
+      seckit-controls: [MSTORE-C1]
+      cwe: CWE-312
+    patterns:
+      - pattern-either:
+          - pattern: $P.setString($K, ...)
+          - pattern: GetStorage().write($K, ...)
+          - pattern: $BOX.write($K, ...)
+      - pattern-not: "$SS.write(key: $K, ...)"
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(token|jwt|auth|session|secret|password|credential)
+
+  - id: seckit.mstore-c3.dart-sensitive-log
+    message: "Sensitive value printed or logged (visible in device logs and bug reports). Remove it, or log only in kDebugMode without secrets."
+    severity: WARNING
+    languages: [dart]
+    metadata:
+      seckit-controls: [MSTORE-C3]
+      cwe: CWE-532
+    patterns:
+      - pattern-either:
+          - pattern: print($MSG)
+          - pattern: debugPrint($MSG, ...)
+          - pattern: log($MSG, ...)
+          - pattern: developer.log($MSG, ...)
+          - pattern: $L.$M($MSG, ...)
+      - metavariable-regex:
+          metavariable: $MSG
+          regex: (?i)^(\w*(token|password|passwd|secret|jwt|otp|credential)\w*|.*\$\{?[\w.]*(token|password|passwd|secret|jwt|otp|credential)[\w.()]*\}?.*|.*\+\s*[\w.]*(token|password|passwd|secret|jwt|otp|credential)[\w.()]*.*)$
+
+  - id: seckit.mstore-c6.dart-hardcoded-key
+    message: "Encryption key or IV hardcoded in the app. Generate a random key and keep it in flutter_secure_storage (Keychain / Keystore)."
+    severity: ERROR
+    languages: [dart]
+    metadata:
+      seckit-controls: [MSTORE-C6]
+      cwe: CWE-321
+    pattern-either:
+      - pattern: Key.fromUtf8("...")
+      - pattern: Key.fromBase64("...")
+      - pattern: IV.fromUtf8("...")
+      - pattern: IV.fromBase64("...")
+      - pattern: encrypt.Key.fromUtf8("...")
+      - pattern: encrypt.Key.fromBase64("...")
+      - pattern: encrypt.IV.fromUtf8("...")
+      - pattern: HiveAesCipher([...])

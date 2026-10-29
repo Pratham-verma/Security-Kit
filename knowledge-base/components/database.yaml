@@ -1,0 +1,182 @@
+id: database
+name: Database
+description: Persistent data store accessed by the backend (SQL or NoSQL).
+order: 40
+question: Does the backend store data in a database?
+platforms: [backend]
+
+options:
+  type: object
+  additionalProperties: false
+  required: [kind]
+  properties:
+    engine:
+      title: Which database engine?
+      enum: [postgres, mysql, sqlite, mssql, oracle, mongodb, dynamodb, firestore, redis, other]
+    kind:
+      title: Is it a SQL or NoSQL database?
+      enum: [sql, nosql]
+    stores_sensitive_data:
+      title: Does it store personal, financial, health or other sensitive data?
+      type: boolean
+      default: true
+
+threats:
+  - id: DB-T1
+    title: SQL injection
+    stride: [T, I, E]
+    cwe: [CWE-89]
+    when:
+      kind: [sql]
+
+  - id: DB-T2
+    title: NoSQL / operator injection
+    stride: [T, I]
+    cwe: [CWE-943]
+    when:
+      kind: [nosql]
+
+  - id: DB-T3
+    title: Excessive damage from a compromised application account
+    stride: [E]
+    cwe: [CWE-250]
+
+  - id: DB-T4
+    title: Credentials leaked from source code or images
+    stride: [I]
+    cwe: [CWE-798]
+
+  - id: DB-T5
+    title: Interception of database traffic
+    stride: [I, T]
+    cwe: [CWE-319]
+
+  - id: DB-T6
+    title: Exposure of sensitive data from stolen disks, snapshots or backups
+    stride: [I]
+    cwe: [CWE-311]
+    when:
+      stores_sensitive_data: [true]
+
+controls:
+  - id: DB-C1
+    title: Use parameterized queries or a safe query builder / ORM
+    mitigates: [DB-T1]
+    severity: critical
+    level: 1
+    when:
+      kind: [sql]
+    standards:
+      asvs: [V5.3.4]
+      owasp_top10: [A03]
+      cwe: [CWE-89]
+    guidance: |
+      Pass all user-influenced values as bound parameters. Never build SQL by string
+      concatenation or template literals. Identifiers (table/column names, sort order) that
+      must be dynamic are chosen from a server-side allow-list. Beware of ORM "raw" APIs.
+    ai_rule: >-
+      Never build SQL with string concatenation or template literals; always use bound
+      parameters, and pick dynamic identifiers (columns, sort order) from an allow-list.
+    verify:
+      - type: semgrep
+        description: No query()/execute()/raw() call receives a concatenated or interpolated string.
+
+  - id: DB-C2
+    title: Reject operator injection in NoSQL queries
+    mitigates: [DB-T2]
+    severity: critical
+    level: 1
+    when:
+      kind: [nosql]
+    standards:
+      asvs: [V5.3.4]
+      owasp_top10: [A03]
+      cwe: [CWE-943]
+    guidance: |
+      Validate request input against a schema so values are primitives of the expected type
+      (strip or reject objects containing `$` operators). Never pass request bodies directly
+      as query filters and never use server-side JavaScript evaluation (`$where`).
+    ai_rule: >-
+      Validate input types before using them in NoSQL queries; never pass a request object
+      directly as a query filter and never use $where or server-side JS evaluation.
+    verify:
+      - type: test
+        description: 'A login with {"password": {"$ne": null}} is rejected.'
+
+  - id: DB-C3
+    title: Least-privilege database accounts
+    mitigates: [DB-T3]
+    severity: high
+    level: 2
+    standards:
+      owasp_top10: [A05]
+      cwe: [CWE-250, CWE-272]
+    guidance: |
+      The application account has only the DML rights it needs — no superuser, no DDL at
+      runtime. Use a separate account for migrations.
+    ai_rule: >-
+      The application connects with a least-privilege database user; migrations use a
+      separate account; never connect as root/superuser/admin.
+    verify:
+      - type: manual
+        description: Application DB role has no DDL/superuser rights.
+
+  - id: DB-C4
+    title: Load database credentials from a secret store, never from source
+    mitigates: [DB-T4]
+    severity: critical
+    level: 1
+    standards:
+      asvs: [V2.10.4]
+      owasp_top10: [A07]
+      cwe: [CWE-798]
+    guidance: |
+      Read connection strings from environment variables or a secrets manager. Never commit
+      them, and never bake them into container images or mobile/web bundles.
+    ai_rule: >-
+      Never hardcode database credentials or connection strings; read them from environment
+      variables or a secrets manager.
+    verify:
+      - type: semgrep
+        description: No connection string with an inline password in source files.
+
+  - id: DB-C5
+    title: Encrypt database connections with verified TLS
+    mitigates: [DB-T5]
+    severity: high
+    level: 2
+    standards:
+      asvs: [V9.2.2]
+      owasp_top10: [A02]
+      cwe: [CWE-319, CWE-295]
+    guidance: |
+      Require TLS between application and database, and verify the server certificate
+      (`sslmode=verify-full` for Postgres; never `rejectUnauthorized: false`).
+    ai_rule: >-
+      Database connections must use TLS with certificate verification; never disable
+      certificate checks (e.g. rejectUnauthorized: false, sslmode=require without verify).
+    verify:
+      - type: semgrep
+        description: No rejectUnauthorized false in DB client config.
+
+  - id: DB-C6
+    title: Encrypt sensitive data at rest and in backups
+    mitigates: [DB-T6]
+    severity: high
+    level: 2
+    when:
+      stores_sensitive_data: [true]
+    standards:
+      asvs: [V6.1.1]
+      owasp_top10: [A02]
+      cwe: [CWE-311]
+    guidance: |
+      Enable storage-level encryption for the database, snapshots and backups. For highly
+      sensitive fields (government IDs, health data), add application-level field
+      encryption with keys held in a KMS.
+    ai_rule: >-
+      Sensitive fields (IDs, health, financial data) are encrypted at rest; keys come from a
+      KMS, never from source code.
+    verify:
+      - type: config
+        description: Storage encryption is enabled on the DB instance and its backups.

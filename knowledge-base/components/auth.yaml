@@ -1,0 +1,279 @@
+id: auth
+name: Authentication
+description: How users prove who they are — passwords, social login (OAuth/OIDC), one-time codes, MFA.
+order: 10
+question: Can users sign up or log in?
+platforms: [web, backend, android, ios]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    methods:
+      title: Which sign-in methods does the app use?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [email_password, oauth, otp_sms, otp_email, passkey, magic_link]
+    mfa:
+      title: Is multi-factor authentication offered?
+      enum: [none, optional, required]
+      default: optional
+
+threats:
+  - id: AUTH-T1
+    title: Credential stuffing and brute-force attacks
+    description: Attackers replay leaked username/password pairs or guess passwords at scale.
+    stride: [S]
+    cwe: [CWE-307]
+
+  - id: AUTH-T2
+    title: Offline cracking of stolen password hashes
+    description: After a database leak, weakly hashed passwords are recovered.
+    stride: [I]
+    cwe: [CWE-916]
+    when:
+      methods: [email_password]
+
+  - id: AUTH-T3
+    title: Weak or previously breached passwords
+    stride: [S]
+    cwe: [CWE-521]
+    when:
+      methods: [email_password]
+
+  - id: AUTH-T4
+    title: Account enumeration
+    description: Different responses for existing vs. unknown accounts reveal valid usernames.
+    stride: [I]
+    cwe: [CWE-204]
+
+  - id: AUTH-T5
+    title: Session fixation after login
+    stride: [S]
+    cwe: [CWE-384]
+
+  - id: AUTH-T6
+    title: OAuth login CSRF and authorization-code interception
+    stride: [S, T]
+    cwe: [CWE-352]
+    when:
+      methods: [oauth]
+
+  - id: AUTH-T7
+    title: One-time code guessing and SIM-swap interception
+    stride: [S]
+    cwe: [CWE-307, CWE-287]
+    when:
+      methods: [otp_sms, otp_email]
+
+  - id: AUTH-T8
+    title: Account takeover with a single compromised factor
+    stride: [S, E]
+    cwe: [CWE-308]
+
+controls:
+  - id: AUTH-C1
+    title: Rate-limit and throttle authentication attempts
+    mitigates: [AUTH-T1, AUTH-T7]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V2.2.1]
+      owasp_top10: [A07]
+      cwe: [CWE-307]
+    guidance: |
+      Throttle login, OTP-verify and password-reset endpoints per account **and** per IP.
+      Prefer progressive delays or soft lockout over permanent lockout (which enables
+      denial of service against users). Add CAPTCHA or bot detection after repeated failures.
+    ai_rule: >-
+      Every login, OTP-verification and password-reset endpoint must be rate-limited per
+      account and per IP; never write an authentication endpoint without throttling.
+    implement:
+      node: rateLimit() middleware (key by account and by IP)
+    verify:
+      - type: test
+        description: N+1 rapid failed logins for one account are rejected or delayed.
+      - type: semgrep
+        description: Auth route handlers are registered behind a rate-limit middleware.
+
+  - id: AUTH-C2
+    title: Hash passwords with Argon2id (or bcrypt/scrypt as fallback)
+    mitigates: [AUTH-T2]
+    severity: critical
+    level: 1
+    platforms: [backend]
+    when:
+      methods: [email_password]
+    standards:
+      asvs: [V2.4.1]
+      owasp_top10: [A02]
+      cwe: [CWE-916, CWE-759]
+      nist: [SP 800-63B 5.1.1.2]
+    guidance: |
+      Use Argon2id (OWASP minimum: m=19 MiB, t=2, p=1) via a maintained library.
+      Never use MD5, SHA-1, SHA-256 or any fast unsalted hash for passwords.
+      Never store or log plaintext passwords.
+    ai_rule: >-
+      Hash passwords only with Argon2id from a maintained library (bcrypt or scrypt if
+      unavailable); never use MD5/SHA-* for passwords and never store or log a plaintext password.
+    implement:
+      node: hashPassword(), verifyPassword(), needsRehash()
+    verify:
+      - type: semgrep
+        description: No md5/sha1/sha256 calls applied to password variables.
+      - type: test
+        description: Stored password values begin with the $argon2id$ prefix.
+
+  - id: AUTH-C3
+    title: Enforce minimum length and block breached passwords
+    mitigates: [AUTH-T3]
+    severity: high
+    level: 1
+    platforms: [backend]
+    when:
+      methods: [email_password]
+    standards:
+      asvs: [V2.1.1, V2.1.7]
+      owasp_top10: [A07]
+      cwe: [CWE-521]
+      nist: [SP 800-63B 5.1.1.2]
+    guidance: |
+      Require at least 12 characters, allow at least 64, allow all printable characters
+      and spaces, and do not impose composition rules. Reject passwords found in breach
+      corpora (e.g. Have I Been Pwned k-anonymity range API).
+    ai_rule: >-
+      Password policy: minimum 12 characters, maximum at least 64, no composition rules,
+      and reject passwords found in breach lists; validate on the server, not only the client.
+    implement:
+      node: checkPasswordPolicy() and isPwnedPassword()
+    verify:
+      - type: test
+        description: An 11-character password and a known-breached password are both rejected.
+
+  - id: AUTH-C4
+    title: Return identical responses for unknown and existing accounts
+    mitigates: [AUTH-T4]
+    severity: medium
+    level: 2
+    platforms: [backend]
+    standards:
+      owasp_top10: [A07]
+      cwe: [CWE-204]
+    guidance: |
+      Login, registration and password-reset flows must return the same message, status
+      code and similar timing whether or not the account exists ("If an account exists,
+      we sent an email").
+    ai_rule: >-
+      Login, signup and password-reset responses must not reveal whether an account
+      exists: same message, same status code, comparable timing.
+    verify:
+      - type: test
+        description: Reset request for unknown vs. known email returns identical status and body.
+
+  - id: AUTH-C5
+    title: Issue a new session identifier on login
+    mitigates: [AUTH-T5]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V3.2.1]
+      owasp_top10: [A07]
+      cwe: [CWE-384]
+    guidance: |
+      Regenerate the session ID (or issue fresh tokens) on every successful authentication
+      and privilege change; invalidate the pre-login session.
+    ai_rule: >-
+      On successful login or privilege change, regenerate the session ID / issue new tokens
+      and invalidate the previous session.
+    verify:
+      - type: test
+        description: Session cookie value changes after a successful login.
+
+  - id: AUTH-C6
+    title: Use Authorization Code flow with PKCE and validate state/nonce
+    mitigates: [AUTH-T6]
+    severity: high
+    level: 1
+    when:
+      methods: [oauth]
+    standards:
+      owasp_top10: [A07]
+      cwe: [CWE-352]
+    guidance: |
+      Use the Authorization Code flow with PKCE (S256) on every client, including mobile and
+      SPAs — never the Implicit flow. Generate and verify `state`; for OIDC also verify
+      `nonce`, the ID-token signature, `iss`, `aud` and `exp`. Mobile apps must use the
+      system browser (ASWebAuthenticationSession / Custom Tabs), not an embedded WebView.
+    ai_rule: >-
+      OAuth/OIDC: use Authorization Code + PKCE (S256), verify state and nonce, validate
+      ID-token signature/iss/aud/exp, never use the implicit flow or an embedded WebView.
+    verify:
+      - type: semgrep
+        description: No response_type=token (implicit flow) in OAuth requests.
+      - type: manual
+        description: Callback rejects a request with a missing or mismatched state.
+
+  - id: AUTH-C7
+    title: Short-lived, single-use, rate-limited one-time codes
+    mitigates: [AUTH-T7]
+    severity: high
+    level: 1
+    platforms: [backend]
+    when:
+      methods: [otp_sms, otp_email]
+    standards:
+      asvs: [V2.7.2, V2.7.3]
+      owasp_top10: [A07]
+      cwe: [CWE-307]
+    guidance: |
+      Codes must come from a CSPRNG, expire within about 10 minutes, be usable once, and be
+      invalidated after a few failed attempts. Treat SMS as a weak factor; prefer TOTP or
+      passkeys for high-value accounts.
+    ai_rule: >-
+      One-time codes: generate with a CSPRNG, expire in 10 minutes or less, single use,
+      invalidate after 5 failed attempts, compare in constant time.
+    implement:
+      node: generateOtp() and safeEqual()
+    verify:
+      - type: test
+        description: A used or expired code is rejected; the 6th wrong attempt invalidates the code.
+
+  - id: AUTH-C8
+    title: Offer multi-factor authentication (require it at higher assurance)
+    mitigates: [AUTH-T8]
+    severity: high
+    level: 2
+    standards:
+      owasp_top10: [A07]
+      cwe: [CWE-308]
+      masvs: [MASVS-AUTH-2]
+      nist: [SP 800-63B AAL2]
+    guidance: |
+      Support a phishing-resistant second factor (passkeys/WebAuthn, or TOTP). At level 3,
+      or for admin accounts, require it.
+    ai_rule: >-
+      Design authentication so a second factor (passkey/WebAuthn or TOTP) can be enforced;
+      admin accounts must always require MFA.
+    verify:
+      - type: manual
+        description: MFA enrollment exists and is enforced for admin roles.
+
+  - id: AUTH-C9
+    title: No security questions or password hints
+    mitigates: [AUTH-T1, AUTH-T8]
+    severity: medium
+    level: 1
+    when:
+      methods: [email_password]
+    standards:
+      asvs: [V2.5.2]
+      cwe: [CWE-640]
+    guidance: Secret questions and password hints are guessable and must not be used for recovery.
+    ai_rule: Never implement security questions or password hints for account recovery.
+    verify:
+      - type: manual
+        description: Recovery flow uses a time-limited token sent to a verified channel only.

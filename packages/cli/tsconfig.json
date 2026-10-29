@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Develop and test against core's sources; the build uses the published package instead.
+    "paths": {
+      "@seckit/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

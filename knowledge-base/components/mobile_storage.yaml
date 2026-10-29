@@ -1,0 +1,198 @@
+id: mobile_storage
+name: Mobile on-device data
+description: Data the Android or iOS app keeps on the device — tokens, user data, caches, keys.
+order: 90
+question: Does the mobile app store anything on the device (tokens, user data, offline cache)?
+platforms: [android, ios]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    data:
+      title: What does the app store on the device?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [auth_tokens, personal_data, payment_data, health_data, offline_cache, encryption_keys]
+
+threats:
+  - id: MSTORE-T1
+    title: Sensitive data readable from insecure local storage
+    description: SharedPreferences, UserDefaults, plain SQLite or files are readable on rooted/jailbroken devices, through backups or forensic extraction.
+    stride: [I]
+    cwe: [CWE-312, CWE-922]
+
+  - id: MSTORE-T2
+    title: Sensitive data leaked through device logs
+    stride: [I]
+    cwe: [CWE-532]
+
+  - id: MSTORE-T3
+    title: Sensitive data leaked through device or cloud backups
+    stride: [I]
+    cwe: [CWE-530]
+
+  - id: MSTORE-T4
+    title: Leakage through app-switcher screenshots, clipboard or keyboard cache
+    stride: [I]
+    cwe: [CWE-200]
+    when:
+      data: [personal_data, payment_data, health_data]
+
+  - id: MSTORE-T5
+    title: Extractable encryption keys (hardcoded or stored in software)
+    stride: [I]
+    cwe: [CWE-321]
+
+  - id: MSTORE-T6
+    title: Data left on the device after logout or account deletion
+    stride: [I]
+    cwe: [CWE-459]
+
+controls:
+  - id: MSTORE-C1
+    title: Keep tokens and secrets in the Keychain / Android Keystore
+    mitigates: [MSTORE-T1]
+    severity: critical
+    level: 1
+    standards:
+      masvs: [MASVS-STORAGE-1]
+      owasp_top10: [A02]
+      cwe: [CWE-312, CWE-922]
+    guidance: |
+      **iOS:** store tokens in the Keychain with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`
+      (or `AfterFirstUnlockThisDeviceOnly` for background use).
+      **Android:** encrypt values with a key held in the Android Keystore (e.g. via Tink) before
+      writing them to DataStore/SharedPreferences; never store tokens in plain preferences.
+      **React Native / Expo:** use `react-native-keychain` or `expo-secure-store`, never AsyncStorage.
+    ai_rule: >-
+      Store tokens and secrets only in the iOS Keychain (ThisDeviceOnly) or encrypted with an
+      Android Keystore key; never in SharedPreferences, UserDefaults, AsyncStorage or plain files.
+    implement:
+      android: Tink AEAD with a key in the Android Keystore; store ciphertext in DataStore
+      ios: Keychain with kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+    verify:
+      - type: semgrep
+        description: No token-like keys written to SharedPreferences, UserDefaults or AsyncStorage.
+
+  - id: MSTORE-C2
+    title: Encrypt sensitive local databases and files
+    mitigates: [MSTORE-T1]
+    severity: high
+    level: 1
+    when:
+      data: [personal_data, payment_data, health_data, offline_cache]
+    standards:
+      masvs: [MASVS-STORAGE-1, MASVS-CRYPTO-2]
+      owasp_top10: [A02]
+      cwe: [CWE-311]
+    guidance: |
+      Store as little as possible. Encrypt sensitive databases (e.g. SQLCipher) and files with
+      keys from the Keystore/Keychain; on iOS use `NSFileProtectionComplete`.
+    ai_rule: >-
+      Sensitive data stored on the device must be minimized and encrypted (SQLCipher or
+      equivalent, iOS NSFileProtectionComplete) with keys from the Keystore/Keychain.
+    implement:
+      android: SQLCipher for databases; keys from the Android Keystore
+      ios: Data Protection .completeFileProtection; SQLCipher for databases
+    verify:
+      - type: manual
+        description: Database and files pulled from a test device are not readable in plaintext.
+
+  - id: MSTORE-C3
+    title: No sensitive data in logs; strip logging from release builds
+    mitigates: [MSTORE-T2]
+    severity: high
+    level: 1
+    standards:
+      masvs: [MASVS-STORAGE-2]
+      owasp_top10: [A09]
+      cwe: [CWE-532]
+    guidance: Never log tokens, credentials or personal data; remove debug logging in release builds (R8/ProGuard rules, `#if DEBUG`).
+    ai_rule: >-
+      Never log tokens, credentials or personal data in the mobile app; wrap debug logging so
+      it is stripped from release builds.
+    verify:
+      - type: semgrep
+        description: No Log.d/print/console.log calls containing token, password or email variables.
+
+  - id: MSTORE-C4
+    title: Exclude sensitive data from backups
+    mitigates: [MSTORE-T3]
+    severity: medium
+    level: 1
+    standards:
+      masvs: [MASVS-STORAGE-2]
+      cwe: [CWE-530]
+    guidance: |
+      **Android:** set `android:allowBackup="false"` or exclude sensitive files with
+      `dataExtractionRules` / `fullBackupContent`. **iOS:** use `ThisDeviceOnly` Keychain items
+      and mark sensitive files with `isExcludedFromBackup`.
+    ai_rule: >-
+      Exclude tokens and sensitive files from backups (Android dataExtractionRules or
+      allowBackup=false; iOS ThisDeviceOnly Keychain items and isExcludedFromBackup).
+    implement:
+      android: android:dataExtractionRules excluding sensitive domains (template in .seckit/snippets/android/)
+      ios: ThisDeviceOnly Keychain items; URLResourceValues.isExcludedFromBackup
+    verify:
+      - type: config
+        description: AndroidManifest backup settings exclude sensitive data.
+
+  - id: MSTORE-C5
+    title: Protect sensitive screens from screenshots, clipboard and keyboard caching
+    mitigates: [MSTORE-T4]
+    severity: medium
+    level: 2
+    when:
+      data: [personal_data, payment_data, health_data]
+    standards:
+      masvs: [MASVS-PLATFORM-3, MASVS-STORAGE-2]
+      cwe: [CWE-200]
+    guidance: |
+      Use `FLAG_SECURE` (Android) or blur the window when going to the background (iOS) on
+      sensitive screens; disable autocorrect/suggestions and copy on sensitive inputs.
+    ai_rule: >-
+      Screens showing sensitive data must hide content in the app switcher (FLAG_SECURE on
+      Android, blur overlay on iOS); sensitive inputs disable autocorrect and suggestions.
+    implement:
+      android: WindowManager.LayoutParams.FLAG_SECURE on sensitive screens
+      ios: cover the window in sceneWillResignActive
+    verify:
+      - type: manual
+        description: The app-switcher preview of sensitive screens shows no data.
+
+  - id: MSTORE-C6
+    title: Hardware-backed, non-exportable keys; no hardcoded keys
+    mitigates: [MSTORE-T5]
+    severity: critical
+    level: 1
+    standards:
+      masvs: [MASVS-CRYPTO-2]
+      owasp_top10: [A02]
+      cwe: [CWE-321, CWE-798]
+    guidance: Generate keys inside the Android Keystore (StrongBox where available) or the Secure Enclave; never ship keys in the app binary.
+    ai_rule: >-
+      Generate encryption keys inside the Android Keystore or iOS Secure Enclave/Keychain;
+      never hardcode keys or ship them in the app.
+    implement:
+      android: KeyGenParameterSpec with setIsStrongBoxBacked(true) where available
+      ios: SecureEnclave.P256 keys or Keychain-generated keys
+    verify:
+      - type: semgrep
+        description: No hardcoded key/IV byte arrays or base64 key constants.
+
+  - id: MSTORE-C7
+    title: Wipe local data on logout and account deletion
+    mitigates: [MSTORE-T6]
+    severity: medium
+    level: 1
+    standards:
+      masvs: [MASVS-STORAGE-2]
+      cwe: [CWE-459]
+    guidance: Clear tokens, caches, databases and downloaded files for the user on logout, and revoke the refresh token server-side.
+    ai_rule: Logout must delete stored tokens, caches and the user's local files, and revoke the refresh token on the server.
+    verify:
+      - type: manual
+        description: After logout, app storage contains no user data.

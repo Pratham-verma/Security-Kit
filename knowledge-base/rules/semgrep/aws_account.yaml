@@ -1,0 +1,157 @@
+rules:
+  - id: seckit.awsacc-c10.tf-admin-port-open-to-world
+    message: "Security group opens SSH (22) or RDP (3389) to the whole internet. Use Systems Manager Session Manager, or allow only known CIDRs."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSACC-C10]
+      cwe: CWE-284
+    patterns:
+      - pattern-either:
+          - pattern: |
+              ingress {
+                ...
+                from_port = $FROM
+                ...
+                to_port = $TO
+                ...
+                cidr_blocks = [..., "0.0.0.0/0", ...]
+                ...
+              }
+          - pattern: |
+              ingress {
+                ...
+                from_port = $FROM
+                ...
+                to_port = $TO
+                ...
+                ipv6_cidr_blocks = [..., "::/0", ...]
+                ...
+              }
+          - pattern: |
+              resource "aws_security_group_rule" $N {
+                ...
+                from_port = $FROM
+                ...
+                to_port = $TO
+                ...
+                cidr_blocks = [..., "0.0.0.0/0", ...]
+                ...
+              }
+          - pattern: |
+              resource "aws_vpc_security_group_ingress_rule" $N {
+                ...
+                cidr_ipv4 = "0.0.0.0/0"
+                ...
+                from_port = $FROM
+                ...
+                to_port = $TO
+                ...
+              }
+      - metavariable-comparison:
+          comparison: ($FROM <= 22 and $TO >= 22) or ($FROM <= 3389 and $TO >= 3389)
+
+  - id: seckit.awsacc-c12.tf-imdsv1-allowed
+    message: "Instance metadata allows IMDSv1. Set metadata_options { http_tokens = \"required\" } so stolen-credential SSRF attacks fail."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSACC-C12]
+      cwe: CWE-918
+    patterns:
+      - pattern-either:
+          - pattern: |
+              resource "aws_instance" $N {
+                ...
+              }
+          - pattern: |
+              resource "aws_launch_template" $N {
+                ...
+              }
+      - pattern-not: |
+          resource $T $N {
+            ...
+            metadata_options {
+              ...
+              http_tokens = "required"
+              ...
+            }
+            ...
+          }
+
+  - id: seckit.awsacc-c6.tf-cloudtrail-weak
+    message: "CloudTrail trail without log file validation or limited to one region. Set enable_log_file_validation = true and is_multi_region_trail = true."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSACC-C6]
+      cwe: CWE-778
+    patterns:
+      - pattern: |
+          resource "aws_cloudtrail" $N {
+            ...
+          }
+      - pattern-not: |
+          resource "aws_cloudtrail" $N {
+            ...
+            enable_log_file_validation = true
+            ...
+            is_multi_region_trail = true
+            ...
+          }
+      - pattern-not: |
+          resource "aws_cloudtrail" $N {
+            ...
+            is_multi_region_trail = true
+            ...
+            enable_log_file_validation = true
+            ...
+          }
+
+  - id: seckit.awsacc-c9.tf-kms-rotation-off
+    message: "Symmetric KMS key without automatic rotation. Set enable_key_rotation = true."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSACC-C9]
+      cwe: CWE-320
+    patterns:
+      - pattern: |
+          resource "aws_kms_key" $N {
+            ...
+          }
+      - pattern-not: |
+          resource "aws_kms_key" $N {
+            ...
+            enable_key_rotation = true
+            ...
+          }
+      - pattern-not: |
+          resource "aws_kms_key" $N {
+            ...
+            customer_master_key_spec = $SPEC
+            ...
+          }
+
+  - id: seckit.awsacc-c4.tf-iam-full-admin-policy
+    message: "IAM policy allows every action on every resource. Grant only the actions and resources this role needs."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSACC-C4]
+      cwe: CWE-269
+    pattern-either:
+      - pattern: |
+          statement {
+            ...
+            actions = ["*"]
+            ...
+            resources = ["*"]
+            ...
+          }
+      - pattern: |
+          {..., Action = "*", ..., Resource = "*", ...}
+      - pattern: |
+          {..., Effect = "Allow", ..., Action = ["*"], ..., Resource = ["*"], ...}
+      - pattern: |
+          {..., Action = "*", ..., Resource = ["*"], ...}

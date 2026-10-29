@@ -1,0 +1,52 @@
+rules:
+  - id: seckit.pay-c4.client-supplied-amount
+    message: "Payment amount taken from the request. Compute amounts on the server from your catalog."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [PAY-C4]
+      cwe: CWE-602
+    patterns:
+      - pattern-either:
+          - pattern: "{..., amount: req.$S.$P, ...}"
+          - pattern: "{..., unit_amount: req.$S.$P, ...}"
+          - pattern: "{..., amount_total: req.$S.$P, ...}"
+          - pattern: "{..., total: req.$S.$P, ...}"
+      - metavariable-regex:
+          metavariable: $S
+          regex: ^(body|query|params)$
+
+  - id: seckit.pay-c4.python-client-supplied-amount
+    message: "Payment amount taken from the request. Compute amounts on the server from your catalog."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [PAY-C4]
+      cwe: CWE-602
+    patterns:
+      - pattern-either:
+          - pattern: $F(..., $KW=request.$A[...], ...)
+          - pattern: $F(..., $KW=request.$A.get(...), ...)
+      - metavariable-regex:
+          metavariable: $KW
+          regex: ^(amount|unit_amount|amount_total|total)$
+
+  - id: seckit.pay-c4.java-client-supplied-amount
+    message: "Payment amount taken from the request body or parameters. Compute amounts on the server from your catalog."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [PAY-C4]
+      cwe: CWE-602
+    patterns:
+      - pattern-either:
+          - pattern-inside: '$RET $M(..., @RequestBody $T $P, ...) { ... }'
+          - pattern-inside: '$RET $M(..., @RequestParam(...) $T $P, ...) { ... }'
+          - pattern-inside: '$RET $M(..., @RequestParam $T $P, ...) { ... }'
+      - pattern-either:
+          - pattern: $B.$SET($P.$GET())
+          - pattern: $B.$SET($P.$FIELD)
+          - pattern: $B.$SET($P)
+      - metavariable-regex:
+          metavariable: $SET
+          regex: ^(setAmount|setUnitAmount|amount|setTotal)$

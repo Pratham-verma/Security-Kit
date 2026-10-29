@@ -1,0 +1,214 @@
+rules:
+  - id: seckit.mplat-c2.trust-all-trust-manager
+    message: "TrustManager accepts every certificate (man-in-the-middle). Remove it and use the platform's default validation."
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      seckit-controls: [MPLAT-C2, WEB-C4, DB-C5]
+      cwe: CWE-295
+    pattern: |
+      override fun checkServerTrusted(...) {}
+
+  - id: seckit.mplat-c2.java-trust-all-trust-manager
+    message: "TrustManager accepts every certificate (man-in-the-middle). Remove it and use the platform's default validation."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [MPLAT-C2, WEB-C4, DB-C5]
+      cwe: CWE-295
+    pattern: |
+      void checkServerTrusted(...) {}
+
+  - id: seckit.mplat-c2.always-true-hostname-verifier
+    message: "HostnameVerifier accepts any host name (man-in-the-middle). Use the default verifier."
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      seckit-controls: [MPLAT-C2, WEB-C4, DB-C5]
+      cwe: CWE-297
+    pattern-either:
+      - pattern: "HostnameVerifier { $H, $S -> true }"
+      - pattern: "$B.hostnameVerifier { $H, $S -> true }"
+
+  - id: seckit.mplat-c2.java-always-true-hostname-verifier
+    message: "HostnameVerifier accepts any host name (man-in-the-middle). Use the default verifier."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [MPLAT-C2, WEB-C4, DB-C5]
+      cwe: CWE-297
+    pattern-either:
+      - pattern: |
+          boolean verify(String $H, SSLSession $S) { return true; }
+      - pattern: $X.setHostnameVerifier(($H, $S) -> true)
+      - pattern: $X.hostnameVerifier(($H, $S) -> true)
+
+  - id: seckit.mplat-c2.ios-trust-evaluation-disabled
+    message: "TLS trust evaluation disabled (man-in-the-middle). Use default evaluation or pinning via NSPinnedDomains."
+    severity: ERROR
+    languages: [swift]
+    metadata:
+      seckit-controls: [MPLAT-C2]
+      cwe: CWE-295
+    pattern-regex: |-
+      \bDisabledTrustEvaluator\(\)|\bDisabledEvaluator\(\)|kCFStreamSSLValidatesCertificateChain\s*:\s*(false|kCFBooleanFalse)
+
+  - id: seckit.mplat-c4.webview-file-access
+    message: "WebView file or universal file access enabled. Serve local content with WebViewAssetLoader instead."
+    severity: ERROR
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [MPLAT-C4]
+      cwe: CWE-749
+    pattern-either:
+      - pattern: $S.allowFileAccessFromFileURLs = true
+      - pattern: $S.allowUniversalAccessFromFileURLs = true
+      - pattern: $S.setAllowFileAccessFromFileURLs(true)
+      - pattern: $S.setAllowUniversalAccessFromFileURLs(true)
+      - pattern: $S.allowFileAccess = true
+      - pattern: $S.setAllowFileAccess(true)
+
+  - id: seckit.mplat-c4.webview-javascript-bridge
+    message: "JavaScript bridge exposed to web content. Only allow it for pages you fully control, over https."
+    severity: WARNING
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [MPLAT-C4]
+      cwe: CWE-749
+    pattern: $W.addJavascriptInterface(...)
+
+  - id: seckit.mplat-c4.webview-loads-intent-url
+    message: "WebView loads a URL that came from an Intent or link. Check it against an allow-list first."
+    severity: ERROR
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [MPLAT-C4, MPLAT-C5]
+      cwe: CWE-939
+    pattern-either:
+      - pattern: $W.loadUrl(<... intent ...>, ...)
+      - pattern: $W.loadUrl(<... getIntent() ...>, ...)
+
+  - id: seckit.mplat-c4.uiwebview
+    message: "UIWebView is deprecated and insecure. Use WKWebView."
+    severity: ERROR
+    languages: [swift]
+    metadata:
+      seckit-controls: [MPLAT-C4]
+      cwe: CWE-477
+    pattern-regex: |-
+      \bUIWebView\b
+
+  - id: seckit.mplat-c4.react-native-webview-unrestricted
+    message: "React Native WebView allows any origin or local file access. Restrict originWhitelist and keep file access off."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [MPLAT-C4]
+      cwe: CWE-749
+    pattern-regex: |-
+      originWhitelist=\{\s*\[\s*['"]\*['"]\s*\]\s*\}|allow(FileAccess|FileAccessFromFileURLs|UniversalAccessFromFileURLs)=\{\s*true\s*\}
+
+  - id: seckit.mplat-c7.webview-debugging-enabled
+    message: "WebView debugging enabled outside a debug check. Guard it with BuildConfig.DEBUG."
+    severity: WARNING
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [MPLAT-C7]
+      cwe: CWE-489
+    patterns:
+      - pattern: WebView.setWebContentsDebuggingEnabled(true)
+      - pattern-not-inside: |
+          if (BuildConfig.DEBUG) { ... }
+
+  - id: seckit.mplat-c10.biometric-without-crypto
+    message: "BiometricPrompt used without a CryptoObject: the result is only a callback and can be bypassed. Unlock a Keystore key instead."
+    severity: WARNING
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [MPLAT-C10]
+      cwe: CWE-287
+    patterns:
+      - pattern: $P.authenticate($INFO)
+      - metavariable-regex:
+          metavariable: $P
+          regex: (?i).*(biometric|prompt).*
+
+  - id: seckit.mplat-c10.ios-evaluate-policy-only
+    message: "LAContext.evaluatePolicy only returns success or failure. For login, unlock a Keychain item protected by .biometryCurrentSet."
+    severity: WARNING
+    languages: [swift]
+    metadata:
+      seckit-controls: [MPLAT-C10]
+      cwe: CWE-287
+    pattern-regex: |-
+      \.evaluatePolicy\(
+
+  - id: seckit.mplat-c2.dart-bad-certificate-callback
+    message: "Certificate validation bypassed (badCertificateCallback / validateCertificate returns true). Remove it; for debugging, use a debug-only proxy CA."
+    severity: ERROR
+    languages: [dart]
+    metadata:
+      seckit-controls: [MPLAT-C2]
+      cwe: CWE-295
+    pattern-either:
+      - pattern: "$C.badCertificateCallback = ($A, $B, $D) => true"
+      - pattern: "$C.badCertificateCallback = ($A, $B, $D) { return true; }"
+      - pattern: "IOHttpClientAdapter(..., validateCertificate: ($A, $B, $D) => true, ...)"
+
+  - id: seckit.mplat-c1.dart-cleartext-url
+    message: "Plain http:// or ws:// URL in the app. Use https:// / wss:// (localhost and the emulator host 10.0.2.2 are fine for development)."
+    severity: WARNING
+    languages: [dart]
+    metadata:
+      seckit-controls: [MPLAT-C1]
+      cwe: CWE-319
+    patterns:
+      - pattern-either:
+          - pattern: Uri.parse($URL)
+          - pattern: Uri.http(...)
+          - pattern: "BaseOptions(..., baseUrl: $URL, ...)"
+          - pattern: WebSocketChannel.connect(Uri.parse($URL))
+          - pattern: $C.loadRequest(Uri.parse($URL))
+      - pattern-not: Uri.parse($X.toString())
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ^['"](http|ws)://(?!(localhost|127\.0\.0\.1|10\.0\.2\.2|0\.0\.0\.0|\[::1\])([:/'"]|$))
+
+  - id: seckit.mplat-c4.dart-webview-file-access
+    message: "WebView file or universal file access enabled. Serve local content from assets instead."
+    severity: ERROR
+    languages: [dart]
+    metadata:
+      seckit-controls: [MPLAT-C4]
+      cwe: CWE-749
+    pattern-either:
+      - pattern: "InAppWebViewSettings(..., allowFileAccessFromFileURLs: true, ...)"
+      - pattern: "InAppWebViewSettings(..., allowUniversalAccessFromFileURLs: true, ...)"
+      - pattern: "AndroidInAppWebViewOptions(..., allowFileAccessFromFileURLs: true, ...)"
+      - pattern: "AndroidInAppWebViewOptions(..., allowUniversalAccessFromFileURLs: true, ...)"
+
+  - id: seckit.mplat-c7.dart-webview-debugging-enabled
+    message: "WebView debugging enabled outside a kDebugMode check, so release builds can be inspected."
+    severity: WARNING
+    languages: [dart]
+    metadata:
+      seckit-controls: [MPLAT-C7]
+      cwe: CWE-489
+    patterns:
+      - pattern-either:
+          - pattern: InAppWebViewController.setWebContentsDebuggingEnabled(true)
+          - pattern: AndroidWebViewController.enableDebugging(true)
+          - pattern: "InAppWebViewSettings(..., isInspectable: true, ...)"
+      - pattern-not-inside: |
+          if (kDebugMode) { ... }
+      - pattern-not-inside: |
+          if (!kReleaseMode) { ... }
+
+  - id: seckit.mplat-c10.dart-biometric-bool-only
+    message: "local_auth only returns true/false, which runtime hooking can flip. For login, unlock a key that requires biometrics (e.g. biometric_storage, or BiometricPrompt + CryptoObject / Keychain biometryCurrentSet via a platform channel)."
+    severity: WARNING
+    languages: [dart]
+    metadata:
+      seckit-controls: [MPLAT-C10]
+      cwe: CWE-287
+    pattern: "$A.authenticate(..., localizedReason: $R, ...)"

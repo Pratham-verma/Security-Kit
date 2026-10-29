@@ -1,0 +1,23 @@
+/* Security Kit green on white, matching the app. */
+:root,
+:root[data-theme='light'] {
+  --sl-color-accent-low: #ecfdf3;
+  --sl-color-accent: #15803d;
+  --sl-color-accent-high: #14532d;
+  --sl-color-white: #102118;
+  --sl-color-gray-1: #1f3329;
+  --sl-color-gray-2: #3f5248;
+  --sl-color-gray-3: #64766c;
+  --sl-color-gray-4: #9aaba1;
+  --sl-color-gray-5: #c8d8ce;
+  --sl-color-gray-6: #e2ebe5;
+  --sl-color-gray-7: #f3f8f5;
+  --sl-color-black: #ffffff;
+}
+.sl-markdown-content table { display: table; width: 100%; }
+.sl-markdown-content code { overflow-wrap: anywhere; }
+.badge-sev { display: inline-block; padding: 0 0.5em; border-radius: 999px; font-size: 0.8em; font-weight: 700; }
+.badge-sev.critical { background: #fde8e8; color: #b91c1c; }
+.badge-sev.high { background: #ffedd5; color: #c2410c; }
+.badge-sev.medium { background: #fef6d8; color: #a16207; }
+.badge-sev.low { background: #eef1f5; color: #475569; }

@@ -1,0 +1,66 @@
+rules:
+  - id: seckit.upload-c2.client-filename-in-path
+    message: "The client's file name is used in a storage path (path traversal, overwrites). Generate the name server-side (safeStorageName())."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [UPLOAD-C2]
+      cwe: CWE-22
+    pattern-either:
+      - pattern: path.join(..., $F.originalname, ...)
+      - pattern: path.resolve(..., $F.originalname, ...)
+      - pattern: $CB(null, $F.originalname)
+      - pattern: path.join(..., req.files.$X.name, ...)
+      - pattern: req.files.$X.mv(<... req.files.$X.name ...>, ...)
+
+  - id: seckit.upload-c3.multer-without-limits
+    message: "multer configured without `limits`. Set fileSize (and files) limits."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [UPLOAD-C3]
+      cwe: CWE-400
+    patterns:
+      - pattern-either:
+          - pattern: multer()
+          - pattern: multer({...})
+      - pattern-not: "multer({..., limits: $L, ...})"
+
+  - id: seckit.upload-c2.python-client-filename-in-path
+    message: "The client's file name is used in a storage path (path traversal, overwrites). Generate the name server-side."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [UPLOAD-C2]
+      cwe: CWE-22
+    patterns:
+      - pattern-either:
+          - pattern: os.path.join(..., $F.filename, ...)
+          - pattern: open(<... $F.filename ...>, ...)
+          - pattern: $F.save(<... $F.filename ...>, ...)
+          - pattern: $FS.save($F.name, $F, ...)
+      - pattern-not: $F.save(<... secure_filename($F.filename) ...>, ...)
+      - pattern-not: open(<... secure_filename($F.filename) ...>, ...)
+
+  - id: seckit.upload-c2.spring-client-filename-in-path
+    message: "The client's file name is used in a storage path (path traversal, overwrites). Generate the name server-side (e.g. a UUID plus a validated extension)."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [UPLOAD-C2]
+      cwe: CWE-22
+    mode: taint
+    pattern-sources:
+      - pattern: (MultipartFile $F).getOriginalFilename()
+      - pattern: (Part $F).getSubmittedFileName()
+      - pattern: (FilePart $F).filename()
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new File($A)
+              - pattern: new File($D, $A)
+              - pattern: Paths.get(..., $A, ...)
+              - pattern: Path.of(..., $A, ...)
+              - pattern: $DIR.resolve($A)
+              - pattern: new FileOutputStream($A)
+          - focus-metavariable: $A

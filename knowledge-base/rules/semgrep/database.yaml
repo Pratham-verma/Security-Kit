@@ -1,0 +1,169 @@
+rules:
+  - id: seckit.db-c1.sql-string-building
+    message: "SQL built with string interpolation or concatenation. Pass values as bound parameters instead."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$QUERY(`...${$X}...`, ...)
+          - pattern: $DB.$QUERY("..." + $X, ...)
+          - pattern: $DB.$QUERY($X + "...", ...)
+      - metavariable-regex:
+          metavariable: $QUERY
+          regex: ^(query|execute|raw|\$queryRawUnsafe|\$executeRawUnsafe|unsafe|exec|run|all|get)$
+
+  - id: seckit.db-c1.sql-template-literal
+    message: "SQL statement assembled in an untagged template literal. Use bound parameters or a safe tagged template (sql``, Prisma.sql``)."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    pattern-regex: |-
+      (?i)(?<![\w$.)\]])`\s*(SELECT\s[^`]*\sFROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\s[^`]*\$\{
+
+  - id: seckit.db-c2.nosql-request-object
+    message: "Request data passed directly as a NoSQL query filter enables operator injection ($ne, $gt, ...). Validate types first."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [DB-C2]
+      cwe: CWE-943
+    patterns:
+      - pattern-either:
+          - pattern: $M.$FIND(req.body, ...)
+          - pattern: $M.$FIND(req.query, ...)
+          - pattern: '$M.$FIND({..., $K: req.body.$P, ...}, ...)'
+          - pattern: '$M.$FIND({..., $K: req.query.$P, ...}, ...)'
+      - metavariable-regex:
+          metavariable: $FIND
+          regex: ^(find|findOne|findOneAndUpdate|findOneAndDelete|deleteOne|deleteMany|updateOne|updateMany|countDocuments|exists)$
+
+  - id: seckit.db-c2.nosql-where
+    message: "$where runs JavaScript inside the database. Use regular query operators."
+    severity: ERROR
+    languages: [javascript, typescript, python]
+    metadata:
+      seckit-controls: [DB-C2]
+      cwe: CWE-943
+    pattern-regex: |-
+      (["']\$where["']|\$where)\s*:
+
+  - id: seckit.db-c5.tls-verification-disabled
+    message: "TLS certificate verification is disabled, allowing man-in-the-middle attacks."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [DB-C5]
+      cwe: CWE-295
+    pattern-either:
+      - pattern: '{..., rejectUnauthorized: false, ...}'
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
+
+  - id: seckit.db-c1.python-sql-string-building
+    message: "SQL built with an f-string, %, + or .format(). Pass values separately: cursor.execute(sql, params)."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    pattern-either:
+      - pattern: $C.execute(f"...", ...)
+      - pattern: $C.execute("..." % $X, ...)
+      - pattern: $C.execute("..." + $X, ...)
+      - pattern: $C.execute("...".format(...), ...)
+      - pattern: $C.executemany(f"...", ...)
+      - pattern: $M.objects.raw(f"...", ...)
+      - pattern: $M.objects.raw("..." % $X, ...)
+      - pattern: $M.objects.raw("...".format(...), ...)
+      - pattern: text(f"...")
+      - pattern: sqlalchemy.text(f"...")
+
+  - id: seckit.db-c1.mobile-sqlite-string-building
+    message: "SQLite query built by string concatenation. Use selectionArgs / bind parameters."
+    severity: ERROR
+    languages: [kotlin, java]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    pattern-either:
+      - pattern: $DB.rawQuery("..." + $X, ...)
+      - pattern: $DB.execSQL("..." + $X, ...)
+
+  - id: seckit.db-c1.kotlin-sqlite-string-template
+    message: "SQLite query built with a Kotlin string template. Use selectionArgs / bind parameters."
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    patterns:
+      - pattern: $DB.$F($Q, ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(rawQuery|execSQL)$
+      - metavariable-regex:
+          metavariable: $Q
+          regex: ^".*\$\{?[A-Za-z_].*"$
+
+  - id: seckit.db-c1.java-sql-string-building
+    message: "SQL built by string concatenation or String.format (JDBC, JdbcTemplate, JPA). Use ? / :named parameters."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    patterns:
+      - pattern-either:
+          - pattern: $S.$M("..." + $X, ...)
+          - pattern: $S.$M($X + "...", ...)
+          - pattern: $S.$M(String.format(...), ...)
+          - patterns:
+              - pattern-inside: |
+                  String $Q = $E;
+                  ...
+              - pattern: $S.$M($Q, ...)
+              - metavariable-regex:
+                  metavariable: $E
+                  regex: ^"[^"]*"\s*\+|\+\s*"|^String\.format\(
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(executeQuery|executeUpdate|executeLargeUpdate|execute|addBatch|prepareStatement|prepareCall|query|queryForObject|queryForList|queryForMap|queryForRowSet|queryForStream|update|batchUpdate|createQuery|createNativeQuery|createSQLQuery|createSelectionQuery|createMutationQuery|sql)$
+
+  - id: seckit.db-c1.kotlin-server-sql-string-building
+    message: "SQL built with a Kotlin string template or concatenation (JdbcTemplate, JPA, Exposed). Use ? / :named parameters."
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    patterns:
+      - pattern: $S.$M($Q, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(executeQuery|executeUpdate|execute|addBatch|prepareStatement|query|queryForObject|queryForList|queryForMap|update|batchUpdate|createQuery|createNativeQuery|exec)$
+      - metavariable-regex:
+          metavariable: $Q
+          regex: ^(".*\$\{?[A-Za-z_].*"|".*"\s*\+.*|.*\+\s*".*")$
+
+  - id: seckit.db-c1.dart-sql-string-building
+    message: "SQL built with string interpolation or concatenation (sqflite, drift, postgres). Use ? placeholders with whereArgs / parameters."
+    severity: ERROR
+    languages: [dart]
+    metadata:
+      seckit-controls: [DB-C1]
+      cwe: CWE-89
+    patterns:
+      - pattern-either:
+          - pattern: "$DB.$F(..., where: $Q, ...)"
+          - pattern: $DB.$F($Q, ...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(query|update|delete|rawQuery|rawInsert|rawUpdate|rawDelete|execute|customSelect|customStatement|customUpdate)$
+      - metavariable-regex:
+          metavariable: $Q
+          regex: ^(['"].*\$.*['"]|.*['"]\s*\+.*|.*\+\s*['"].*)$

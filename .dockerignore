@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+packages/core/assets
+.git
+.seckit
+examples
+*.log
+kit
+site

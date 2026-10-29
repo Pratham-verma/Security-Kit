@@ -1,0 +1,61 @@
+{
+  "name": "@seckit/core",
+  "version": "0.1.0",
+  "description": "Security Kit engine: loads the knowledge base, validates app manifests, resolves the controls an app needs.",
+  "keywords": [
+    "security",
+    "owasp",
+    "asvs",
+    "masvs",
+    "threat-model",
+    "knowledge-base"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./engine": {
+      "types": "./dist/engine.d.ts",
+      "import": "./dist/engine.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "node scripts/build-kb.mjs && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "validate:kb": "tsx src/validate-cli.ts",
+    "generate": "node scripts/build-kb.mjs"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.5",
+    "esbuild": "^0.28.0"
+  }
+}

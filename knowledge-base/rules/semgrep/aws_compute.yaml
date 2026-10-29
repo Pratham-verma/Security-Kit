@@ -1,0 +1,137 @@
+rules:
+  - id: seckit.awscmp-c1.tf-ebs-unencrypted
+    message: "EBS volume is not encrypted. Set encrypted = true (and enable EBS encryption by default in the account)."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSCMP-C1]
+      cwe: CWE-311
+    pattern-either:
+      - patterns:
+          - pattern: |
+              resource "aws_ebs_volume" $N {
+                ...
+              }
+          - pattern-not: |
+              resource "aws_ebs_volume" $N {
+                ...
+                encrypted = true
+                ...
+              }
+      - pattern: |
+          root_block_device {
+            ...
+            encrypted = false
+            ...
+          }
+      - pattern: |
+          ebs_block_device {
+            ...
+            encrypted = false
+            ...
+          }
+
+  - id: seckit.awscmp-c5.tf-ecs-privileged-container
+    message: "Container runs privileged, which gives it control of the host. Remove privileged = true."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSCMP-C5]
+      cwe: CWE-250
+    pattern-either:
+      - pattern: |
+          {..., privileged = true, ...}
+      - pattern: |
+          resource "aws_ecs_task_definition" $N {
+            ...
+            pid_mode = "host"
+            ...
+          }
+
+  - id: seckit.awscmp-c6.tf-ecs-public-ip
+    message: "ECS service assigns public IPs to its tasks. Run tasks in private subnets behind a load balancer (assign_public_ip = false)."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSCMP-C6]
+      cwe: CWE-284
+    pattern: |
+      network_configuration {
+        ...
+        assign_public_ip = true
+        ...
+      }
+
+  - id: seckit.awscmp-c7.tf-lambda-url-no-auth
+    message: "Lambda function URL with authorization_type NONE lets anyone on the internet call the function. Use AWS_IAM, or authenticate every request in the function."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSCMP-C7]
+      cwe: CWE-306
+    pattern: |
+      resource "aws_lambda_function_url" $N {
+        ...
+        authorization_type = "NONE"
+        ...
+      }
+
+  - id: seckit.awscmp-c7.tf-lambda-permission-any-principal
+    message: "Lambda permission granted to principal \"*\". Name the calling service or account and add source_arn."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSCMP-C7]
+      cwe: CWE-284
+    pattern: |
+      resource "aws_lambda_permission" $N {
+        ...
+        principal = "*"
+        ...
+      }
+
+  - id: seckit.awscmp-c4.tf-secret-in-function-env
+    message: "Secret-looking value set as a plain environment variable. Read it from Secrets Manager or SSM Parameter Store at runtime."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSCMP-C4, SEC-C1]
+      cwe: CWE-798
+    patterns:
+      - pattern-inside: |
+          environment {
+            ...
+          }
+      - pattern: |
+          $KEY = "$VALUE"
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(password|passwd|secret|token|api_?key|private_?key).*
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^[^$].{5,}$
+
+  - id: seckit.awscmp-c9.tf-http-listener-not-redirect
+    message: "Load balancer listener serves plain HTTP. Use HTTPS with a TLS 1.2+ policy; HTTP listeners should only redirect to HTTPS."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSCMP-C9]
+      cwe: CWE-319
+    patterns:
+      - pattern: |
+          resource "aws_lb_listener" $N {
+            ...
+            protocol = "HTTP"
+            ...
+          }
+      - pattern-not: |
+          resource "aws_lb_listener" $N {
+            ...
+            default_action {
+              ...
+              type = "redirect"
+              ...
+            }
+            ...
+          }

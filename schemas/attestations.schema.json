@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://securitykit.dev/schemas/attestations.schema.json",
+  "title": "Security Kit attestations (.seckit/attestations.yaml)",
+  "description": "Human sign-offs for controls that automated checks cannot fully verify. Committed with the code so changes are reviewed.",
+  "type": "object",
+  "required": ["version", "attestations"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "attestations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["control", "status", "by", "date"],
+        "additionalProperties": false,
+        "properties": {
+          "control": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*-C[0-9]+$" },
+          "status": {
+            "description": "done: implemented and verified. not_applicable: does not apply to this app. risk_accepted: known gap, consciously accepted until `expires`.",
+            "enum": ["done", "not_applicable", "risk_accepted"]
+          },
+          "by": { "type": "string", "minLength": 1, "description": "Who verified or decided." },
+          "date": { "$ref": "#/$defs/date" },
+          "evidence": { "type": "string", "minLength": 1, "description": "How it was verified: PR, test, ticket, config." },
+          "reason": { "type": "string", "minLength": 1, "description": "Why it does not apply, or why the risk is accepted." },
+          "expires": { "$ref": "#/$defs/date", "description": "Re-verify by this date; after it the attestation is ignored." }
+        },
+        "allOf": [
+          { "if": { "properties": { "status": { "const": "done" } } }, "then": { "required": ["evidence"] } },
+          { "if": { "properties": { "status": { "const": "not_applicable" } } }, "then": { "required": ["reason"] } },
+          { "if": { "properties": { "status": { "const": "risk_accepted" } } }, "then": { "required": ["reason", "expires"] } }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+  }
+}

@@ -1,0 +1,390 @@
+id: aws_compute
+name: AWS compute and web services
+description: Where the app's code runs on AWS — EC2, containers (ECS, Fargate, EKS), Lambda, Elastic Beanstalk, App Runner, Lightsail, Batch — and the load balancers in front of it.
+category: cloud
+order: 210
+question: Does the app run code on AWS (EC2, ECS/Fargate, EKS, Lambda, Elastic Beanstalk, App Runner…)?
+platforms: [cloud]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    services:
+      title: Which AWS compute services does the app use?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [ec2, ecs, eks, lambda, elastic_beanstalk, app_runner, lightsail, batch]
+    public_endpoint:
+      title: Is the app reachable from the internet (a load balancer, API Gateway, CloudFront or a public URL)?
+      type: boolean
+
+threats:
+  - id: AWSCMP-T1
+    title: Data exposed through unencrypted or public disks, snapshots and images
+    stride: [I]
+    cwe: [CWE-311, CWE-200]
+    when:
+      services: [ec2, lightsail, elastic_beanstalk, batch]
+  - id: AWSCMP-T2
+    title: Container escape or host takeover from a privileged container
+    stride: [E]
+    cwe: [CWE-250]
+    when:
+      services: [ecs, eks, batch]
+  - id: AWSCMP-T3
+    title: Secrets leaked through user data, environment variables or task definitions
+    stride: [I]
+    cwe: [CWE-312, CWE-798]
+  - id: AWSCMP-T4
+    title: Functions or services invoked by anyone on the internet
+    stride: [S, E]
+    cwe: [CWE-284]
+  - id: AWSCMP-T5
+    title: Known vulnerabilities in old images, runtimes and platforms
+    stride: [E]
+    cwe: [CWE-1104]
+  - id: AWSCMP-T6
+    title: Traffic read or modified because it is not encrypted
+    stride: [I, T]
+    cwe: [CWE-319]
+    when:
+      public_endpoint: [true]
+  - id: AWSCMP-T7
+    title: Attacks on the workload are not logged
+    stride: [R]
+    cwe: [CWE-778]
+  - id: AWSCMP-T8
+    title: Untrusted or tampered code and images are deployed
+    stride: [T]
+    cwe: [CWE-494]
+
+controls:
+  - id: AWSCMP-C1
+    title: Encrypt EBS volumes, snapshots and AMIs by default
+    mitigates: [AWSCMP-T1]
+    severity: high
+    level: 1
+    when:
+      services: [ec2, lightsail, elastic_beanstalk, batch]
+    standards:
+      cis_aws: [Foundations 6.1.1, Compute 2.1.2, Compute 2.2.1, Compute 2.2.3]
+      cwe: [CWE-311]
+    guidance: |
+      Turn on EBS encryption by default in every region, encrypt every volume, snapshot and AMI (with a
+      customer-managed KMS key for sensitive data), and re-encrypt older unencrypted volumes by copying the
+      snapshot with encryption.
+    ai_rule: Every EBS volume, root block device and AMI you define must be encrypted; set encrypted = true and enable EBS encryption by default.
+    verify:
+      - type: semgrep
+        description: IaC EBS volumes and root devices are encrypted.
+    tests:
+      - "`aws ec2 get-ebs-encryption-by-default` returns `EbsEncryptionByDefault: true` in each region you use."
+      - "`aws ec2 describe-volumes --filters Name=encrypted,Values=false --query 'Volumes[].VolumeId'` returns an empty list."
+      - "`aws ec2 describe-snapshots --owner-ids self --query 'Snapshots[?Encrypted==`false`].SnapshotId'` returns an empty list."
+      - "`aws ec2 describe-images --owners self --query 'Images[].BlockDeviceMappings[].Ebs.Encrypted'` contains only `true`."
+
+  - id: AWSCMP-C2
+    title: No public snapshots or AMIs
+    mitigates: [AWSCMP-T1]
+    severity: critical
+    level: 1
+    when:
+      services: [ec2, lightsail, elastic_beanstalk, batch]
+    standards:
+      cis_aws: [Compute 2.1.5, Compute 2.2.2]
+      cwe: [CWE-200]
+    guidance: Turn on block public access for EBS snapshots and AMIs in every region, and share images or snapshots only with specific account IDs.
+    ai_rule: Never make EBS snapshots or AMIs public; share them only with specific AWS account IDs.
+    verify:
+      - type: manual
+        description: Block public access is on for snapshots and AMIs; none are public.
+    tests:
+      - "`aws ec2 get-snapshot-block-public-access-state` returns `block-all-sharing` in each region."
+      - "`aws ec2 get-image-block-public-access-state` returns `block-new-sharing` in each region."
+      - "`aws ec2 describe-images --owners self --query 'Images[?Public==`true`].ImageId'` returns an empty list."
+
+  - id: AWSCMP-C3
+    title: Patched, approved and recent images
+    mitigates: [AWSCMP-T5, AWSCMP-T8]
+    severity: high
+    level: 1
+    when:
+      services: [ec2, lightsail, elastic_beanstalk, batch]
+    standards:
+      cis_aws: [Compute 2.1.3, Compute 2.1.4, Compute 2.5, Compute 2.9, Compute 5.1, Compute 5.11]
+      cwe: [CWE-1104]
+    guidance: |
+      Build instances only from approved, hardened AMIs (for example with EC2 Image Builder) that are rebuilt at
+      least every 90 days, replace long-running instances regularly, and manage patching through AWS Systems
+      Manager (Patch Manager) so every instance is reachable and patched.
+    ai_rule: Launch instances only from approved, recently built AMIs (looked up by tag or SSM parameter), never from a hardcoded old or public AMI ID.
+    verify:
+      - type: manual
+        description: AMIs are under 90 days old; every instance is managed by Systems Manager and compliant with patch baselines.
+    tests:
+      - "`aws ec2 describe-images --owners self --query 'Images[].[ImageId,CreationDate]'` — every AMI in use was created in the last 90 days."
+      - "`aws ssm describe-instance-information --query 'InstanceInformationList[].[InstanceId,PingStatus]'` lists every running instance as `Online`."
+      - "`aws ssm list-compliance-summaries` shows no non-compliant patch resources."
+
+  - id: AWSCMP-C4
+    title: No secrets in user data, environment variables or task definitions
+    mitigates: [AWSCMP-T3]
+    severity: critical
+    level: 1
+    standards:
+      cis_aws: [Compute 2.13, Compute 3.6, Compute 12.3, Compute 12.12]
+      owasp_top10: [A02]
+      cwe: [CWE-312, CWE-798]
+    guidance: |
+      Store secrets in AWS Secrets Manager or SSM Parameter Store (SecureString) and read them at runtime with
+      the workload's role. In ECS use the `secrets` field (not `environment`); in Lambda read from Secrets
+      Manager (or encrypt environment variables with a customer-managed key); never put secrets in EC2 user data.
+    ai_rule: >-
+      Never put passwords, tokens or keys in EC2 user data, Lambda environment variables or ECS container
+      environment; reference Secrets Manager or SSM Parameter Store instead.
+    verify:
+      - type: semgrep
+        description: IaC does not pass secret-looking values as plain container or function environment variables.
+    tests:
+      - "`aws ec2 describe-instance-attribute --instance-id <id> --attribute userData --query UserData.Value --output text | base64 -d` contains no passwords, tokens or keys."
+      - "`aws ecs describe-task-definition --task-definition <family>` — secret values appear under `secrets` (Secrets Manager/SSM ARNs), not under `environment`."
+      - "`aws lambda get-function-configuration --function-name <fn> --query Environment` contains no secret values in plain text."
+
+  - id: AWSCMP-C5
+    title: Containers run unprivileged, as non-root, with a read-only root filesystem
+    mitigates: [AWSCMP-T2]
+    severity: high
+    level: 1
+    when:
+      services: [ecs, eks, batch]
+    standards:
+      cis_aws: [Compute 3.1, Compute 3.3, Compute 3.4, Compute 3.5]
+      cwe: [CWE-250]
+    guidance: |
+      Task definitions and pods must not use `privileged: true`, host PID mode, or (with host networking) the
+      root user. Set a non-root `user`, `readonlyRootFilesystem: true` (mount writable volumes only where
+      needed), and drop Linux capabilities you do not need.
+    ai_rule: >-
+      Container definitions must set privileged false, a non-root user and readonlyRootFilesystem true, and
+      must not use pidMode or networkMode "host".
+    verify:
+      - type: semgrep
+        description: IaC task definitions are not privileged.
+    tests:
+      - "`aws ecs describe-task-definition --task-definition <family> --query 'taskDefinition.[pidMode,networkMode,containerDefinitions[].[name,privileged,user,readonlyRootFilesystem]]'` — `pidMode` is not `host`, `privileged` is not `true`, `user` is set to a non-root user, `readonlyRootFilesystem` is `true`."
+      - "EKS: `kubectl get pods -A -o jsonpath='{..securityContext}'` shows `runAsNonRoot: true`, `privileged: false` (or not set) and `readOnlyRootFilesystem: true`."
+
+  - id: AWSCMP-C6
+    title: Workloads are not directly exposed (no public IPs on tasks and instances)
+    mitigates: [AWSCMP-T4]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Compute 3.2, Compute 3.14, Compute 5.6]
+      owasp_top10: [A05]
+      cwe: [CWE-284]
+    guidance: |
+      Run tasks and instances in private subnets with `assignPublicIp: DISABLED`, and expose them only through a
+      load balancer, API Gateway or CloudFront. Reach the internet through a NAT gateway or VPC endpoints.
+    ai_rule: ECS services and task sets must set assign_public_ip = false (assignPublicIp DISABLED) and run in private subnets behind a load balancer.
+    verify:
+      - type: semgrep
+        description: IaC ECS services do not assign public IPs.
+    tests:
+      - "`aws ecs describe-services --cluster <c> --services <s> --query 'services[].networkConfiguration.awsvpcConfiguration.assignPublicIp'` returns `DISABLED`."
+      - "`aws ec2 describe-instances --query 'Reservations[].Instances[?PublicIpAddress!=null].[InstanceId,PublicIpAddress]'` returns only intended public hosts (ideally none)."
+
+  - id: AWSCMP-C7
+    title: Lambda functions are not callable by everyone
+    mitigates: [AWSCMP-T4]
+    severity: high
+    level: 1
+    when:
+      services: [lambda]
+    standards:
+      cis_aws: [Compute 12.6, Compute 12.10]
+      owasp_top10: [A01]
+      cwe: [CWE-284]
+    guidance: |
+      Function URLs must use `AWS_IAM` auth unless the function is deliberately public and does its own
+      authentication; resource-based permissions must name a specific principal and a `SourceArn`/`SourceAccount`.
+    ai_rule: >-
+      Lambda function URLs must use authorization_type AWS_IAM, and Lambda permissions must name a specific
+      principal with source_arn; never grant invoke to principal "*".
+    verify:
+      - type: semgrep
+        description: IaC Lambda URLs require IAM auth; permissions are not granted to "*".
+    tests:
+      - "`aws lambda get-function-url-config --function-name <fn>` shows `AuthType: AWS_IAM` (or the function authenticates every request itself, by design)."
+      - "`aws lambda get-policy --function-name <fn>` — every statement has a specific `Principal` and a `SourceArn` or `SourceAccount` condition."
+
+  - id: AWSCMP-C8
+    title: Supported runtimes and platform versions
+    mitigates: [AWSCMP-T5]
+    severity: medium
+    level: 1
+    standards:
+      cis_aws: [Compute 3.8, Compute 10.1, Compute 12.11]
+      cwe: [CWE-1104]
+    guidance: |
+      Use Lambda runtimes that are not deprecated, the latest Fargate platform version, and Elastic Beanstalk
+      managed platform updates. Track AWS runtime end-of-support dates and upgrade before them.
+    ai_rule: Use only supported Lambda runtimes and the LATEST Fargate platform version; never pin a deprecated runtime.
+    verify:
+      - type: manual
+        description: No function uses a deprecated runtime; Fargate and Beanstalk platforms are current.
+    tests:
+      - "`aws lambda list-functions --query 'Functions[].[FunctionName,Runtime]'` — none of the runtimes are deprecated (compare with the AWS Lambda runtimes page)."
+      - "`aws ecs describe-services --cluster <c> --services <s> --query 'services[].platformVersion'` is `LATEST` or the newest version."
+      - "`aws elasticbeanstalk describe-configuration-settings --application-name <a> --environment-name <e>` shows `ManagedActionsEnabled: true`."
+
+  - id: AWSCMP-C9
+    title: HTTPS everywhere at the edge
+    mitigates: [AWSCMP-T6]
+    severity: high
+    level: 1
+    when:
+      public_endpoint: [true]
+    standards:
+      cis_aws: [Compute 10.4, Compute 16.1]
+      owasp_top10: [A02]
+      cwe: [CWE-319]
+    guidance: |
+      Load balancer listeners accept HTTPS with a current TLS policy (TLS 1.2+); port 80 only redirects to 443.
+      CloudFront and API Gateway use HTTPS-only viewer policies. Encrypt traffic between the load balancer and
+      targets when it carries sensitive data.
+    ai_rule: Load balancer listeners must use HTTPS with a TLS 1.2+ policy; HTTP listeners may only redirect to HTTPS.
+    verify:
+      - type: semgrep
+        description: IaC HTTP listeners only redirect.
+    tests:
+      - "`aws elbv2 describe-listeners --load-balancer-arn <lb>` — every `HTTP` listener's default action is `redirect` to `HTTPS`; HTTPS listeners use an `ELBSecurityPolicy-TLS13-*` or other TLS 1.2+ policy."
+      - "`curl -sI http://<your-domain>` returns a 301/308 to `https://`."
+
+  - id: AWSCMP-C10
+    title: Logging and monitoring for every workload
+    mitigates: [AWSCMP-T7]
+    severity: medium
+    level: 1
+    standards:
+      cis_aws: [Foundations 4.10, Compute 2.6, Compute 3.7, Compute 3.9, Compute 8.1, Compute 10.2, Compute 10.3, Compute 12.2]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: |
+      Every ECS container has a log configuration, Lambda writes to CloudWatch Logs, Elastic Beanstalk streams
+      logs to CloudWatch/S3, load balancers, CloudFront and API Gateway have access logs on, and ECS Container
+      Insights / Lambda Insights / EC2 detailed monitoring are on for production.
+    ai_rule: Every container definition needs a logConfiguration, and load balancers, API Gateway stages and CloudFront distributions need access logging enabled.
+    verify:
+      - type: manual
+        description: Workload logs and access logs reach CloudWatch or S3.
+    tests:
+      - "`aws ecs describe-task-definition --task-definition <family> --query 'taskDefinition.containerDefinitions[].logConfiguration'` is set for every container."
+      - "`aws elbv2 describe-load-balancer-attributes --load-balancer-arn <lb>` shows `access_logs.s3.enabled: true`."
+      - "`aws ecs describe-clusters --clusters <c> --include SETTINGS` shows `containerInsights: enabled`."
+
+  - id: AWSCMP-C11
+    title: Only trusted, scanned images and signed code are deployed
+    mitigates: [AWSCMP-T8, AWSCMP-T5]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Compute 3.13, Compute 12.8]
+      owasp_top10: [A08]
+      cwe: [CWE-494]
+    guidance: |
+      Pull images only from your private ECR (with scan on push or Amazon Inspector), use immutable tags or
+      digests, and enable Lambda code signing for functions that handle sensitive data.
+    ai_rule: Reference container images from your private ECR by digest or immutable tag; never deploy images from unknown public registries.
+    verify:
+      - type: manual
+        description: ECR scanning is on; images come only from approved registries; code signing on sensitive functions.
+    tests:
+      - "`aws ecr describe-repositories --query 'repositories[].[repositoryName,imageScanningConfiguration.scanOnPush,imageTagMutability]'` shows scanning on and `IMMUTABLE` tags (or Amazon Inspector ECR scanning enabled: `aws inspector2 batch-get-account-status`)."
+      - "Every `image` in your task definitions points to your account's ECR registry."
+      - "`aws lambda get-function-code-signing-config --function-name <fn>` returns a config for sensitive functions."
+
+  - id: AWSCMP-C12
+    title: EKS clusters — private API endpoint, secrets encryption and audit logs
+    mitigates: [AWSCMP-T4, AWSCMP-T7, AWSCMP-T3]
+    severity: high
+    level: 1
+    when:
+      services: [eks]
+    standards:
+      owasp_top10: [A05]
+      cwe: [CWE-284, CWE-778]
+    guidance: |
+      Restrict the EKS API endpoint (private access, or public access limited to known CIDRs), encrypt
+      Kubernetes secrets with a KMS key, enable control-plane audit and authenticator logs, and use IAM roles
+      for service accounts (or EKS Pod Identity) instead of node credentials. Follow the separate CIS Amazon EKS
+      Benchmark for node and Kubernetes settings.
+    ai_rule: EKS clusters must enable secrets encryption with KMS, audit logging, and a private or IP-restricted API endpoint; pods use IRSA or Pod Identity.
+    verify:
+      - type: manual
+        description: Endpoint access, encryption and logging are configured as described.
+    tests:
+      - "`aws eks describe-cluster --name <c> --query 'cluster.[resourcesVpcConfig.endpointPublicAccess,resourcesVpcConfig.publicAccessCidrs,encryptionConfig,logging.clusterLogging]'` — public access off or limited to known CIDRs, a `secrets` encryption config, and `audit` and `authenticator` logs enabled."
+
+  - id: AWSCMP-C13
+    title: Lightsail and simple hosting locked down
+    mitigates: [AWSCMP-T4, AWSCMP-T7]
+    severity: medium
+    level: 1
+    when:
+      services: [lightsail]
+    standards:
+      cis_aws: [Compute 5.3, Compute 5.4, Compute 5.5, Compute 5.7, Compute 5.8, Compute 5.9, Compute 5.10]
+      cwe: [CWE-284]
+    guidance: |
+      Close SSH/RDP in the Lightsail firewall when not needed (or restrict them to known IPs), keep Lightsail
+      buckets private with IAM-based access and access logging, and attach only the instances that need them.
+    ai_rule: Lightsail firewall rules must not open SSH or RDP to all IPs, and Lightsail buckets must stay private.
+    verify:
+      - type: manual
+        description: Lightsail ports restricted; buckets private with logging.
+    tests:
+      - "`aws lightsail get-instance-port-states --instance-name <i>` — ports 22 and 3389 are closed or limited to specific CIDRs."
+      - "`aws lightsail get-buckets --include-connected-resources` — `accessRules.getObject` is `private` and `accessLogConfig.enabled` is `true`."
+
+  - id: AWSCMP-C14
+    title: Clean up unused resources
+    mitigates: [AWSCMP-T1, AWSCMP-T5]
+    severity: low
+    level: 2
+    when:
+      services: [ec2, lightsail, elastic_beanstalk, batch]
+    standards:
+      cis_aws: [Compute 2.2.4, Compute 2.10, Compute 2.11, Compute 2.12]
+      cwe: [CWE-1104]
+    guidance: Remove unattached EBS volumes, unused network interfaces and instances stopped for over 90 days, and set root volumes to delete on termination, so forgotten resources do not hold old data or unpatched software.
+    ai_rule: Set delete_on_termination for instance volumes and do not leave unattached volumes or unused interfaces in infrastructure code.
+    verify:
+      - type: manual
+        description: No unattached volumes, unused ENIs or long-stopped instances.
+    tests:
+      - "`aws ec2 describe-volumes --filters Name=status,Values=available --query 'Volumes[].VolumeId'` returns an empty list."
+      - "`aws ec2 describe-network-interfaces --filters Name=status,Values=available` returns no interfaces."
+      - "`aws ec2 describe-instances --filters Name=instance-state-name,Values=stopped --query 'Reservations[].Instances[].[InstanceId,StateTransitionReason]'` — none stopped for more than 90 days."
+
+  - id: AWSCMP-C15
+    title: Batch and cross-service roles prevent the confused-deputy problem
+    mitigates: [AWSCMP-T4]
+    severity: medium
+    level: 2
+    when:
+      services: [batch, lambda, app_runner]
+    standards:
+      cis_aws: [Compute 8.2, Compute 12.7]
+      cwe: [CWE-441]
+    guidance: Service roles that AWS services assume must restrict the trust policy with `aws:SourceArn` / `aws:SourceAccount`, and every function must reference an existing, active execution role.
+    ai_rule: Trust policies for service roles must include aws:SourceArn or aws:SourceAccount conditions.
+    verify:
+      - type: manual
+        description: Service-role trust policies include source conditions.
+    tests:
+      - "`aws iam get-role --role-name <service-role> --query Role.AssumeRolePolicyDocument` contains an `aws:SourceArn` or `aws:SourceAccount` condition."
+      - "For each function, `aws iam get-role --role-name <execution-role>` succeeds (the role exists)."

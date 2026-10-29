@@ -1,0 +1,24 @@
+{
+  "name": "@seckit/site",
+  "version": "0.1.0",
+  "private": true,
+  "description": "securitykit website: landing page, the hosted app (/app) and the docs (/docs).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "prebuild": "node scripts/prepare.mjs",
+    "build": "astro build",
+    "predev": "node scripts/prepare.mjs",
+    "dev": "astro dev",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.6",
+    "astro": "7.3.8",
+    "cookie": "2.0.1"
+  },
+  "devDependencies": {
+    "@seckit/core": "0.1.0"
+  },
+  "//": "cookie: Astro's build output imports it from the site folder; pinning it here keeps npm from resolving the older copy used by other workspaces."
+}

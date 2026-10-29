@@ -1,0 +1,306 @@
+id: mobile_platform
+name: Mobile platform security
+description: How the Android or iOS app talks to the network and to other apps — TLS, WebViews, deep links, exported components, release builds, integrity.
+order: 95
+question: Is there a native or cross-platform mobile app (Android or iOS)?
+platforms: [android, ios]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    webviews:
+      title: Does the app show web content in a WebView?
+      type: boolean
+      default: false
+    deep_links:
+      title: Can the app be opened from links (deep links, App Links, Universal Links, custom URL schemes)?
+      type: boolean
+      default: false
+    biometrics:
+      title: Does the app use fingerprint or face unlock?
+      type: boolean
+      default: false
+
+threats:
+  - id: MPLAT-T1
+    title: Traffic read or modified because it is sent in cleartext
+    stride: [I, T]
+    cwe: [CWE-319]
+
+  - id: MPLAT-T2
+    title: Man-in-the-middle because certificate validation is disabled or trusts user-installed CAs
+    stride: [I, T, S]
+    cwe: [CWE-295]
+
+  - id: MPLAT-T3
+    title: Man-in-the-middle through a rogue or compromised certificate authority
+    stride: [I, T]
+    cwe: [CWE-295]
+
+  - id: MPLAT-T4
+    title: WebView abuse (script injection, JavaScript bridge calls, local file access)
+    stride: [T, E, I]
+    cwe: [CWE-749, CWE-79]
+    when:
+      webviews: [true]
+
+  - id: MPLAT-T5
+    title: Malicious links trigger actions or inject data into the app
+    stride: [S, T]
+    cwe: [CWE-939]
+    when:
+      deep_links: [true]
+
+  - id: MPLAT-T6
+    title: Other apps abuse exported components (activities, services, receivers, providers)
+    stride: [E, I]
+    cwe: [CWE-926]
+
+  - id: MPLAT-T7
+    title: Release builds that can be debugged or inspected at runtime
+    stride: [T, I]
+    cwe: [CWE-489]
+
+  - id: MPLAT-T8
+    title: Modified apps, emulators or bots abusing the backend
+    stride: [S, T]
+    cwe: [CWE-693]
+
+  - id: MPLAT-T9
+    title: Known vulnerabilities in outdated platform versions
+    stride: [E]
+    cwe: [CWE-1104]
+
+  - id: MPLAT-T10
+    title: Biometric check bypassed because it only returns true/false
+    stride: [S]
+    cwe: [CWE-287]
+    when:
+      biometrics: [true]
+
+controls:
+  - id: MPLAT-C1
+    title: HTTPS only — no cleartext traffic
+    mitigates: [MPLAT-T1]
+    severity: high
+    level: 1
+    standards:
+      masvs: [MASVS-NETWORK-1]
+      owasp_top10: [A02]
+      cwe: [CWE-319]
+    guidance: |
+      **Android:** keep `cleartextTrafficPermitted="false"` (the default since targetSdk 28) and
+      never set `android:usesCleartextTraffic="true"`. **iOS:** keep App Transport Security on —
+      no `NSAllowsArbitraryLoads`, and no per-domain `NSExceptionAllowsInsecureHTTPLoads` for
+      production hosts.
+    ai_rule: >-
+      Never enable cleartext HTTP in the mobile app: no usesCleartextTraffic or
+      cleartextTrafficPermitted=true on Android, no NSAllowsArbitraryLoads or insecure ATS
+      exceptions on iOS; use https:// URLs only.
+    implement:
+      android: Network Security Config with cleartextTrafficPermitted="false" (template in .seckit/snippets/android/)
+      ios: App Transport Security without NSAllowsArbitraryLoads (template in .seckit/snippets/ios/)
+    verify:
+      - type: config
+        description: No cleartext permissions in AndroidManifest.xml, network security config or Info.plist.
+
+  - id: MPLAT-C2
+    title: Never disable certificate validation or trust user-installed CAs in release builds
+    mitigates: [MPLAT-T2]
+    severity: critical
+    level: 1
+    standards:
+      masvs: [MASVS-NETWORK-1]
+      owasp_top10: [A02]
+      cwe: [CWE-295]
+    guidance: |
+      Never ship a TrustManager that accepts every certificate, a HostnameVerifier that returns
+      true, an iOS trust evaluator that is disabled, or a Network Security Config that trusts
+      `user` certificates outside `<debug-overrides>`. For proxy debugging use debug-only overrides.
+    ai_rule: >-
+      Never write trust-all TrustManagers, always-true HostnameVerifiers, disabled iOS trust
+      evaluation, or network configs that trust user CAs outside debug-overrides — not even
+      "temporarily".
+    implement:
+      android: trust only "system" anchors in base-config; user CAs only inside <debug-overrides>
+      ios: rely on default URLSession trust evaluation; never accept a challenge without evaluating it
+    verify:
+      - type: semgrep
+        description: No trust-all TrustManager/HostnameVerifier or disabled trust evaluator.
+
+  - id: MPLAT-C3
+    title: Pin the API's public keys (with a backup pin)
+    mitigates: [MPLAT-T3]
+    severity: medium
+    level: 3
+    standards:
+      masvs: [MASVS-NETWORK-2]
+      cwe: [CWE-295]
+    guidance: |
+      For high-risk apps, pin the SPKI hash of your API's key **and** a backup key, set an
+      expiration, and have a rotation plan — a wrong pin bricks the app's networking.
+    ai_rule: >-
+      Implement pinning only through the platform config (Android <pin-set>, iOS NSPinnedDomains)
+      with at least one backup pin; never hand-roll pinning in TrustManager code.
+    implement:
+      android: <pin-set> with a backup pin and expiration in the Network Security Config
+      ios: NSPinnedDomains in Info.plist (iOS 14+)
+    verify:
+      - type: manual
+        description: Pins include a backup key and a documented rotation procedure.
+
+  - id: MPLAT-C4
+    title: Harden WebViews
+    mitigates: [MPLAT-T4]
+    severity: high
+    level: 1
+    when:
+      webviews: [true]
+    standards:
+      masvs: [MASVS-PLATFORM-2]
+      owasp_top10: [A03]
+      cwe: [CWE-749, CWE-79]
+    guidance: |
+      Load only your own HTTPS origins; keep JavaScript off unless needed; never expose a
+      JavaScript bridge (`addJavascriptInterface`, script message handlers) to content you do
+      not control; disable file and universal file access; never load URLs taken from intents or
+      deep links without an allow-list. On React Native, restrict `originWhitelist`.
+    ai_rule: >-
+      WebViews load only allow-listed https origins; keep JavaScript and file access off unless
+      required; never expose a JavaScript bridge to untrusted content; never load URLs from
+      intents or links without an allow-list.
+    implement:
+      android: WebViewAssetLoader for local content instead of file:// access
+      ios: WKWebView (never UIWebView) with a navigation delegate that enforces an origin allow-list
+    verify:
+      - type: semgrep
+        description: No file/universal access, unrestricted origins or bridges to untrusted content.
+
+  - id: MPLAT-C5
+    title: Treat deep links as untrusted input
+    mitigates: [MPLAT-T5]
+    severity: high
+    level: 1
+    when:
+      deep_links: [true]
+    standards:
+      masvs: [MASVS-PLATFORM-1, MASVS-CODE-4]
+      cwe: [CWE-939]
+    guidance: |
+      Prefer verified links (Android App Links with autoVerify, iOS Universal Links) over custom
+      URL schemes, which any app can register. Validate every parameter, never perform sensitive
+      actions (payments, account changes) from a link without user confirmation, and never pass
+      link URLs into WebViews unchecked.
+    ai_rule: >-
+      Validate every deep-link parameter; require user confirmation before acting on a link;
+      prefer verified App Links/Universal Links over custom URL schemes for sensitive flows.
+    implement:
+      android: App Links with android:autoVerify="true" and a hosted assetlinks.json
+      ios: Universal Links via the Associated Domains entitlement
+    verify:
+      - type: manual
+        description: Link handlers validate input and confirm sensitive actions.
+
+  - id: MPLAT-C6
+    title: Export only the components that must be reachable from other apps
+    mitigates: [MPLAT-T6]
+    severity: high
+    level: 1
+    platforms: [android]
+    standards:
+      masvs: [MASVS-PLATFORM-1]
+      cwe: [CWE-926]
+    guidance: |
+      Set `android:exported="false"` on every service, receiver and provider that other apps do
+      not need. Exported ones must require a permission (signature-level where possible) and
+      validate all incoming intents.
+    ai_rule: >-
+      New Android services, receivers and content providers use android:exported="false" unless
+      they must be public, in which case they require a signature-level permission.
+    verify:
+      - type: config
+        description: Exported services, receivers and providers declare a permission.
+
+  - id: MPLAT-C7
+    title: Release builds are not debuggable
+    mitigates: [MPLAT-T7]
+    severity: high
+    level: 1
+    standards:
+      masvs: [MASVS-RESILIENCE-4]
+      owasp_top10: [A05]
+      cwe: [CWE-489]
+    guidance: |
+      No `android:debuggable="true"` or `isDebuggable = true` in release, no
+      `WebView.setWebContentsDebuggingEnabled(true)` outside debug builds, and no debug menus or
+      test endpoints in release. Enable R8/ProGuard shrinking for release.
+    ai_rule: >-
+      Never make release builds debuggable; guard WebView debugging and debug-only features with
+      BuildConfig.DEBUG / #if DEBUG.
+    verify:
+      - type: config
+        description: Release build types and manifests are not debuggable.
+
+  - id: MPLAT-C8
+    title: Attest app and device integrity for sensitive actions
+    mitigates: [MPLAT-T8]
+    severity: medium
+    level: 3
+    standards:
+      masvs: [MASVS-RESILIENCE-1, MASVS-RESILIENCE-2]
+      cwe: [CWE-693]
+    guidance: |
+      Request an integrity token before high-value requests and verify it **on the server**;
+      the app must never decide this locally. Treat failures as a risk signal, not proof.
+    ai_rule: >-
+      Integrity verdicts (Play Integrity, App Attest) are verified on the backend before sensitive
+      actions; never trust a pass/fail flag computed in the app.
+    implement:
+      android: Play Integrity API, token verified by your server
+      ios: App Attest (DCAppAttestService), assertion verified by your server
+    verify:
+      - type: manual
+        description: The backend rejects sensitive requests without a valid integrity verdict.
+
+  - id: MPLAT-C9
+    title: Keep platform versions current and be able to force updates
+    mitigates: [MPLAT-T9]
+    severity: medium
+    level: 1
+    standards:
+      masvs: [MASVS-CODE-1, MASVS-CODE-2]
+      cwe: [CWE-1104]
+    guidance: |
+      Target a recent Android SDK (store requirements rise every year), raise the minimum OS
+      version as old versions lose security updates, and have a way to force users onto a fixed
+      version after a critical vulnerability.
+    ai_rule: Do not lower targetSdk or the minimum iOS version; keep build tooling and platform SDKs current.
+    verify:
+      - type: config
+        description: targetSdk is recent; a forced-update mechanism exists.
+
+  - id: MPLAT-C10
+    title: Bind biometric unlock to a Keystore/Keychain key
+    mitigates: [MPLAT-T10]
+    severity: high
+    level: 1
+    when:
+      biometrics: [true]
+    standards:
+      masvs: [MASVS-AUTH-2]
+      owasp_top10: [A07]
+      cwe: [CWE-287]
+    guidance: |
+      A biometric callback that only returns success can be bypassed with runtime hooking. Unlock
+      a key that requires user authentication (Android `BiometricPrompt` with a `CryptoObject`;
+      iOS a Keychain item with `SecAccessControl` `.biometryCurrentSet`) and use that key.
+    ai_rule: >-
+      Biometric login must unlock a cryptographic key (BiometricPrompt with a CryptoObject; a
+      Keychain item protected by biometryCurrentSet), never just check a success callback.
+    implement:
+      android: BiometricPrompt.authenticate(promptInfo, CryptoObject(cipher)) with a setUserAuthenticationRequired key
+      ios: Keychain item with SecAccessControlCreateWithFlags(.biometryCurrentSet)
+    verify:
+      - type: semgrep
+        description: BiometricPrompt is called with a CryptoObject; no bare LAContext.evaluatePolicy for login.

@@ -1,0 +1,173 @@
+id: logging
+name: Logging and monitoring
+description: Application logs, security event logging, alerting and error handling.
+order: 80
+question: Does the backend write logs (almost every backend does)?
+platforms: [backend]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    destination:
+      title: Where do logs go?
+      enum: [stdout_or_files, log_service, siem]
+    regulated_data:
+      title: Is the app subject to GDPR, HIPAA, PCI DSS or similar data rules?
+      type: boolean
+      default: false
+
+threats:
+  - id: LOG-T1
+    title: Attacks go undetected because security events are not logged
+    stride: [R]
+    cwe: [CWE-778]
+
+  - id: LOG-T2
+    title: Passwords, tokens or personal data written to logs
+    stride: [I]
+    cwe: [CWE-532]
+
+  - id: LOG-T3
+    title: Log injection and forged log entries
+    stride: [T, R]
+    cwe: [CWE-117]
+
+  - id: LOG-T4
+    title: Logs tampered with, deleted, or readable by too many people
+    stride: [T, R, I]
+    cwe: [CWE-284]
+
+  - id: LOG-T5
+    title: Incidents discovered too late because nobody is alerted
+    stride: [R]
+    cwe: [CWE-778]
+
+  - id: LOG-T6
+    title: Detailed error messages shown to users
+    stride: [I]
+    cwe: [CWE-209]
+
+controls:
+  - id: LOG-C1
+    title: Log security-relevant events with enough context
+    mitigates: [LOG-T1]
+    severity: high
+    level: 1
+    standards:
+      asvs: [V7.1.3, V7.1.4, V7.2.1, V7.2.2]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: |
+      Log login success/failure, MFA events, password changes, access-control failures,
+      input-validation failures, admin actions and permission changes. Each entry includes a
+      UTC timestamp, user ID, source IP, request/correlation ID, action and outcome.
+    ai_rule: >-
+      Log authentication events, authorization failures, validation failures and admin actions
+      as structured events with timestamp, user ID, IP, request ID, action and outcome.
+    verify:
+      - type: test
+        description: A failed login and a 403 each produce a structured security log entry.
+
+  - id: LOG-C2
+    title: Never log secrets or sensitive personal data
+    mitigates: [LOG-T2]
+    severity: high
+    level: 1
+    standards:
+      asvs: [V7.1.1, V7.1.2]
+      owasp_top10: [A09]
+      cwe: [CWE-532]
+    guidance: |
+      Configure redaction in the logger (field allow-list or deny-list for password, token,
+      authorization, cookie, card, ssn, ...). Do not log full request bodies or headers.
+    ai_rule: >-
+      Never log passwords, tokens, cookies, Authorization headers, card data or full request
+      bodies; configure logger redaction for these fields.
+    implement:
+      node: redact()
+    verify:
+      - type: semgrep
+        description: No logging of req.body, req.headers or password/token variables.
+
+  - id: LOG-C3
+    title: Structured logging that neutralizes user input
+    mitigates: [LOG-T3]
+    severity: medium
+    level: 1
+    standards:
+      asvs: [V7.3.1]
+      owasp_top10: [A09]
+      cwe: [CWE-117]
+    guidance: Use a structured (JSON) logger and pass user input as fields, never concatenated into the message, so CR/LF and control characters cannot forge entries.
+    ai_rule: >-
+      Use the structured logger and pass user-controlled values as separate fields, never
+      concatenated into the log message string.
+    verify:
+      - type: semgrep
+        description: No string concatenation of request data into log messages.
+
+  - id: LOG-C4
+    title: Centralized, access-controlled, tamper-resistant log storage
+    mitigates: [LOG-T4]
+    severity: medium
+    level: 2
+    standards:
+      asvs: [V7.3.3, V7.3.4]
+      owasp_top10: [A09]
+      cwe: [CWE-284]
+    guidance: Ship logs off the host to a central store with restricted access, append-only or immutable retention, synchronized clocks, and a defined retention period.
+    ai_rule: Send logs to the central log pipeline (stdout or the configured transport); do not write security logs to local files only.
+    verify:
+      - type: manual
+        description: Application servers cannot delete or modify shipped logs.
+
+  - id: LOG-C5
+    title: Alert on suspicious activity
+    mitigates: [LOG-T5]
+    severity: medium
+    level: 2
+    standards:
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: Alert on brute-force patterns, spikes in 401/403/5xx, admin and permission changes, and use of disabled accounts; have an incident response runbook.
+    ai_rule: >-
+      When adding security-relevant features, emit events that monitoring can alert on (auth
+      failures, permission changes, admin actions).
+    verify:
+      - type: manual
+        description: A simulated brute-force attack triggers an alert.
+
+  - id: LOG-C6
+    title: Generic errors for users, details only in server logs
+    mitigates: [LOG-T6]
+    severity: medium
+    level: 1
+    standards:
+      asvs: [V7.4.1]
+      owasp_top10: [A05]
+      cwe: [CWE-209]
+    guidance: Use a global error handler that returns a generic message plus a correlation ID and logs the full error server-side.
+    ai_rule: >-
+      Route errors through a global handler that returns a generic message with a request ID
+      to the client and logs details server-side.
+    verify:
+      - type: test
+        description: An unhandled exception returns a generic body with a request ID.
+
+  - id: LOG-C7
+    title: Retention limits and access auditing for regulated data in logs
+    mitigates: [LOG-T2, LOG-T4]
+    severity: medium
+    level: 2
+    when:
+      regulated_data: [true]
+    standards:
+      asvs: [V7.1.2]
+      owasp_top10: [A09]
+      cwe: [CWE-532]
+    guidance: Pseudonymize personal data in logs, set retention to what the regulation allows, and audit who reads the logs.
+    ai_rule: Log pseudonymous user IDs instead of names, emails or other personal data.
+    verify:
+      - type: manual
+        description: Log retention and access policies match the applicable regulation.

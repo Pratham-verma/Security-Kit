@@ -1,0 +1,293 @@
+rules:
+  - id: seckit.sess-c5.jwt-verify-without-algorithms
+    message: "jwt.verify() without an explicit `algorithms` allow-list. Pass { algorithms: [...] } plus audience/issuer checks."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [SESS-C5]
+      cwe: CWE-347
+    patterns:
+      - pattern-either:
+          - pattern: $JWT.verify($T, $K)
+          - patterns:
+              - pattern: $JWT.verify($T, $K, {...}, ...)
+              - pattern-not: '$JWT.verify($T, $K, {..., algorithms: $A, ...}, ...)'
+      - metavariable-regex:
+          metavariable: $JWT
+          regex: ^(jwt|jsonwebtoken|JWT)$
+
+  - id: seckit.sess-c5.jwt-decode-without-verify
+    message: "jwt.decode() does not check the signature. Never use its result for authentication or authorization."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [SESS-C5]
+      cwe: CWE-345
+    patterns:
+      - pattern-either:
+          - pattern: $JWT.decode(...)
+          - pattern: decodeJwt(...)
+      - metavariable-regex:
+          metavariable: $JWT
+          regex: ^(jwt|jsonwebtoken|JWT)$
+
+  - id: seckit.sess-c5.jwt-alg-none
+    message: "The \"none\" algorithm disables JWT signature checks."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [SESS-C5]
+      cwe: CWE-347
+    pattern-regex: |-
+      algorithms\s*:\s*\[[^\]]*["']none["']
+
+  - id: seckit.sess-c3.token-in-web-storage
+    message: "Tokens in localStorage/sessionStorage can be stolen by any XSS. Keep them in memory or use HttpOnly cookies."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [SESS-C3]
+      cwe: CWE-922
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($K, ...)
+          - pattern: sessionStorage.setItem($K, ...)
+          - pattern: window.localStorage.setItem($K, ...)
+          - pattern: window.sessionStorage.setItem($K, ...)
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(token|jwt|auth|session|refresh|credential)
+
+  - id: seckit.sess-c6.math-random-token
+    message: "Math.random() is predictable. Use crypto.randomBytes / randomToken() for tokens and IDs."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [SESS-C6, AUTH-C7]
+      cwe: CWE-330
+    pattern-either:
+      - pattern: Math.random().toString(...)
+      - patterns:
+          - pattern: $V = <... Math.random() ...>
+          - metavariable-regex:
+              metavariable: $V
+              regex: (?i).*(token|secret|otp|code|session|nonce|key|password|salt)
+
+  - id: seckit.sess-c1.insecure-cookie-flags
+    message: "Session cookie with secure or httpOnly disabled."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [SESS-C1]
+      cwe: CWE-614
+    pattern-either:
+      - pattern: '$RES.cookie($N, $V, {..., httpOnly: false, ...})'
+      - pattern: '$RES.cookie($N, $V, {..., secure: false, ...})'
+      - pattern: '$SESSION({..., cookie: {..., secure: false, ...}, ...})'
+      - pattern: '$SESSION({..., cookie: {..., httpOnly: false, ...}, ...})'
+
+  - id: seckit.sess-c7.credentials-in-query
+    message: "Credentials read from the query string leak into logs, history and Referer headers. Accept them only from headers or cookies."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [SESS-C7, API-C10]
+      cwe: CWE-598
+    patterns:
+      - pattern-either:
+          - pattern: req.query.$P
+          - pattern: req.query[$Q]
+      - metavariable-regex:
+          metavariable: $P
+          regex: (?i)^(token|access_?token|refresh_?token|id_?token|api_?key|apikey|jwt|session_?id|password|secret)$
+
+  - id: seckit.sess-c5.python-jwt-signature-not-verified
+    message: "JWT decoded without verifying its signature. Never trust these claims."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [SESS-C5]
+      cwe: CWE-347
+    pattern-either:
+      - pattern: 'jwt.decode(..., options={..., "verify_signature": False, ...}, ...)'
+      - pattern: jwt.decode(..., verify=False, ...)
+
+  - id: seckit.sess-c5.python-jwt-alg-none
+    message: "The \"none\" algorithm disables JWT signature checks."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [SESS-C5]
+      cwe: CWE-347
+    pattern-regex: |-
+      algorithms\s*=\s*\[[^\]]*["']none["']
+
+  - id: seckit.sess-c1.python-insecure-cookie-settings
+    message: "Session or CSRF cookie without Secure/HttpOnly."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      seckit-controls: [SESS-C1]
+      cwe: CWE-614
+    pattern-either:
+      - pattern: SESSION_COOKIE_SECURE = False
+      - pattern: SESSION_COOKIE_HTTPONLY = False
+      - pattern: CSRF_COOKIE_SECURE = False
+      - pattern: $APP.config["SESSION_COOKIE_SECURE"] = False
+      - pattern: $APP.config["SESSION_COOKIE_HTTPONLY"] = False
+      - pattern: $R.set_cookie(..., secure=False, ...)
+      - pattern: $R.set_cookie(..., httponly=False, ...)
+
+  - id: seckit.sess-c2.python-csrf-disabled
+    message: "CSRF protection disabled for this view or app."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      seckit-controls: [SESS-C2]
+      cwe: CWE-352
+    pattern-either:
+      - pattern: |
+          @csrf_exempt
+          def $F(...):
+            ...
+      - pattern: $APP.config["WTF_CSRF_ENABLED"] = False
+      - pattern: WTF_CSRF_ENABLED = False
+
+  - id: seckit.sess-c7.python-credentials-in-query
+    message: "Credentials read from the query string leak into logs and history. Accept them only from headers or cookies."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      seckit-controls: [SESS-C7, API-C10]
+      cwe: CWE-598
+    patterns:
+      - pattern-either:
+          - pattern: request.args.get($K, ...)
+          - pattern: request.args[$K]
+          - pattern: request.GET.get($K, ...)
+          - pattern: request.GET[$K]
+          - pattern: request.query_params.get($K, ...)
+          - pattern: request.query_params[$K]
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i)^["'](token|access_token|refresh_token|id_token|api_key|apikey|jwt|session_id|password|secret)["']$
+
+  - id: seckit.sess-c6.python-random-for-secrets
+    message: "The random module is predictable. Use the secrets module (secrets.token_urlsafe, secrets.randbelow)."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      seckit-controls: [SESS-C6, AUTH-C7]
+      cwe: CWE-330
+    patterns:
+      - pattern: $V = <... random.$F(...) ...>
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?i).*(token|secret|otp|code|session|nonce|key|password|salt)
+
+  - id: seckit.sess-c2.spring-csrf-disabled
+    message: "Spring Security CSRF protection disabled. Keep it on for cookie-based sessions; disable it only for stateless APIs that never use cookies."
+    severity: WARNING
+    languages: [java, kotlin]
+    metadata:
+      seckit-controls: [SESS-C2]
+      cwe: CWE-352
+    pattern-either:
+      - pattern: $H.csrf().disable()
+      - pattern: $H.csrf($C -> $C.disable())
+      - pattern: $H.csrf(AbstractHttpConfigurer::disable)
+
+  - id: seckit.sess-c2.kotlin-dsl-csrf-disabled
+    message: "Spring Security CSRF protection disabled. Keep it on for cookie-based sessions; disable it only for stateless APIs that never use cookies."
+    severity: WARNING
+    languages: [kotlin]
+    metadata:
+      seckit-controls: [SESS-C2]
+      cwe: CWE-352
+    pattern: "csrf { disable() }"
+
+  - id: seckit.sess-c5.java-jwt-not-verified
+    message: "JWT read without verifying its signature, or the \"none\" algorithm allowed. Verify with JWT.require(alg).build().verify() / Jwts.parser().verifyWith(key).build().parseSignedClaims()."
+    severity: ERROR
+    languages: [java, kotlin]
+    metadata:
+      seckit-controls: [SESS-C5]
+      cwe: CWE-347
+    pattern-either:
+      - pattern: com.auth0.jwt.JWT.decode(...)
+      - pattern: com.auth0.jwt.algorithms.Algorithm.none()
+      - pattern: $P.parseClaimsJwt(...)
+      - pattern: $P.parseUnsecuredClaims(...)
+      - pattern: $P.parseUnsecuredContent(...)
+      - pattern: Jwts.parser().unsecured()
+
+  - id: seckit.sess-c5.java-hardcoded-jwt-key
+    message: "JWT signing key hardcoded in source. Load it from a secret store and rotate it."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [SESS-C5, SEC-C1]
+      cwe: CWE-798
+    pattern-either:
+      - pattern: Keys.hmacShaKeyFor("...".getBytes(...))
+      - pattern: Algorithm.HMAC256("...")
+      - pattern: Algorithm.HMAC384("...")
+      - pattern: Algorithm.HMAC512("...")
+      - pattern: $B.signWith($ALG, "...")
+      - pattern: $B.setSigningKey("...")
+      - pattern: new SecretKeySpec("...".getBytes(...), $ALG)
+
+  - id: seckit.sess-c1.java-insecure-cookie-flags
+    message: "Cookie with Secure or HttpOnly turned off. Session cookies need Secure, HttpOnly and SameSite."
+    severity: ERROR
+    languages: [java, kotlin]
+    metadata:
+      seckit-controls: [SESS-C1]
+      cwe: CWE-614
+    pattern-either:
+      - pattern: $C.setHttpOnly(false)
+      - pattern: $C.setSecure(false)
+      - pattern: ResponseCookie.from(...). ... .httpOnly(false)
+      - pattern: ResponseCookie.from(...). ... .secure(false)
+
+  - id: seckit.sess-c6.java-insecure-random-token
+    message: "java.util.Random / Math.random() / RandomStringUtils are predictable. Use SecureRandom for tokens, codes and keys."
+    severity: WARNING
+    languages: [java]
+    metadata:
+      seckit-controls: [SESS-C6, AUTH-C7]
+      cwe: CWE-330
+    patterns:
+      - pattern-either:
+          - pattern: $T $V = <... new Random(...) ...>;
+          - pattern: $T $V = <... Math.random() ...>;
+          - pattern: $T $V = <... RandomStringUtils.$F(...) ...>;
+          - pattern: $T $V = <... ThreadLocalRandom.current() ...>;
+      - pattern-not: $T $V = <... RandomStringUtils.secure() ...>;
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?i).*(token|secret|otp|code|session|nonce|key|password|salt)
+
+  - id: seckit.sess-c7.spring-credentials-in-query
+    message: "Credential accepted as a query parameter (leaks into logs and browser history). Accept it only from a header or cookie."
+    severity: WARNING
+    languages: [java]
+    metadata:
+      seckit-controls: [SESS-C7, API-C10]
+      cwe: CWE-598
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: '$RET $M(..., @RequestParam($K) $T $P, ...) { ... }'
+                  - pattern: '$RET $M(..., @RequestParam(name = $K, ...) $T $P, ...) { ... }'
+                  - pattern: '$RET $M(..., @RequestParam(value = $K, ...) $T $P, ...) { ... }'
+              - metavariable-regex:
+                  metavariable: $K
+                  regex: (?i)^"(token|access_token|refresh_token|id_token|api_key|apikey|jwt|session_id|sessionid|password|secret)"$
+          - patterns:
+              - pattern: '$RET $M(..., @RequestParam $T $P, ...) { ... }'
+              - metavariable-regex:
+                  metavariable: $P
+                  regex: (?i)^(token|accessToken|access_token|refreshToken|idToken|apiKey|api_key|jwt|sessionId|password|secret)$
+      - focus-metavariable: $P

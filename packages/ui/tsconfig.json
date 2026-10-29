@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // Develop and test against the sources of the other packages; the build uses the published ones.
+    "paths": {
+      "@seckit/core": ["../core/src/index.ts"],
+      "@seckit/core/engine": ["../core/src/engine.ts"],
+      "@seckit/core/browser": ["../core/src/browser.ts"],
+      "@seckit/cli/lib": ["../cli/src/lib.ts"]
+    }
+  },
+  "include": ["src/server", "src/shared", "test"]
+}

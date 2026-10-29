@@ -1,0 +1,91 @@
+rules:
+  - id: seckit.auth-c2.fast-hash-for-password
+    message: "Passwords hashed with a fast hash (MD5/SHA). Use Argon2id (hashPassword() in @seckit/node) or bcrypt."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [AUTH-C2]
+      cwe: CWE-916
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: crypto.createHash($ALG).update($PW, ...)
+              - pattern: createHash($ALG).update($PW, ...)
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: (?i)^["'](md5|sha1|sha-1|sha224|sha256|sha-256|sha384|sha512|sha-512)["']$
+          - metavariable-regex:
+              metavariable: $PW
+              regex: (?i).*(pass(word|wd)?|pwd)
+      - patterns:
+          - pattern: $LIB($PW)
+          - metavariable-regex:
+              metavariable: $LIB
+              regex: ^(md5|sha1|sha256|sha512)$
+          - metavariable-regex:
+              metavariable: $PW
+              regex: (?i).*(pass(word|wd)?|pwd)
+
+  - id: seckit.auth-c2.python-fast-hash-for-password
+    message: "Passwords hashed with a fast hash (hashlib MD5/SHA). Use argon2-cffi (Argon2id) or bcrypt."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [AUTH-C2]
+      cwe: CWE-916
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.$ALG($PW, ...)
+          - pattern: hashlib.$ALG($PW.encode(...), ...)
+          - pattern: hashlib.$ALG(...).update($PW.encode(...))
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: ^(md5|sha1|sha224|sha256|sha384|sha512|sha3_256|sha3_512|blake2b|blake2s)$
+      - metavariable-regex:
+          metavariable: $PW
+          regex: (?i).*(pass(word|wd)?|pwd)
+
+  - id: seckit.auth-c2.java-weak-password-encoder
+    message: "Passwords stored in plaintext or with a fast/deprecated hash. Use Argon2PasswordEncoder or BCryptPasswordEncoder (or PasswordEncoderFactories.createDelegatingPasswordEncoder())."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [AUTH-C2]
+      cwe: CWE-916
+    pattern-either:
+      - pattern: NoOpPasswordEncoder.getInstance()
+      - pattern: new MessageDigestPasswordEncoder(...)
+      - pattern: new StandardPasswordEncoder(...)
+      - pattern: new LdapShaPasswordEncoder(...)
+      - pattern: new Md4PasswordEncoder(...)
+      - pattern: new ShaPasswordEncoder(...)
+      - pattern: new Md5PasswordEncoder(...)
+      - patterns:
+          - pattern-either:
+              - pattern: $MD.digest($PW.getBytes(...))
+              - pattern: $MD.update($PW.getBytes(...))
+              - pattern: DigestUtils.$F($PW)
+              - pattern: Hashing.$ALG().hashString($PW, ...)
+          - metavariable-regex:
+              metavariable: $PW
+              regex: (?i).*(pass(word|wd)?|pwd)
+
+  - id: seckit.auth-c2.kotlin-weak-password-encoder
+    message: "Passwords stored in plaintext or with a fast hash. Use Argon2PasswordEncoder or BCryptPasswordEncoder."
+    severity: ERROR
+    languages: [kotlin]
+    metadata:
+      seckit-controls: [AUTH-C2]
+      cwe: CWE-916
+    pattern-either:
+      - pattern: NoOpPasswordEncoder.getInstance()
+      - pattern: MessageDigestPasswordEncoder(...)
+      - pattern: StandardPasswordEncoder(...)
+      - patterns:
+          - pattern-either:
+              - pattern: $MD.digest($PW.toByteArray(...))
+              - pattern: $MD.update($PW.toByteArray(...))
+              - pattern: DigestUtils.$F($PW)
+          - metavariable-regex:
+              metavariable: $PW
+              regex: (?i).*(pass(word|wd)?|pwd)

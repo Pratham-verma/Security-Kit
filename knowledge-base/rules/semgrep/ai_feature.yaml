@@ -1,0 +1,37 @@
+rules:
+  - id: seckit.ai-c8.llm-sdk-in-browser
+    message: "dangerouslyAllowBrowser exposes the model provider API key to every user. Call the model from your backend."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [AI-C8, SEC-C2]
+      cwe: CWE-798
+    pattern: "{..., dangerouslyAllowBrowser: true, ...}"
+
+  - id: seckit.ai-c2.python-llm-output-executed
+    message: "Model output passed to eval/exec/a shell. Treat LLM output as untrusted input; never execute it outside a sandbox."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [AI-C2]
+      cwe: CWE-94
+    patterns:
+      - pattern-either:
+          - pattern: $SINK(<... $R.choices[$I].message.content ...>, ...)
+          - pattern: $SINK(<... $R.content[$I].text ...>, ...)
+      - metavariable-regex:
+          metavariable: $SINK
+          regex: ^(eval|exec|os\.system|subprocess\.run|subprocess\.call|subprocess\.Popen|subprocess\.check_output)$
+
+  - id: seckit.ai-c8.dart-llm-sdk-in-app
+    message: "LLM API key used inside the Flutter app, where anyone can extract it. Call the model from your backend (or Firebase AI Logic with App Check)."
+    severity: ERROR
+    languages: [dart]
+    metadata:
+      seckit-controls: [AI-C8, SEC-C2]
+      cwe: CWE-798
+    pattern-either:
+      - pattern: "GenerativeModel(..., apiKey: $K, ...)"
+      - pattern: OpenAI.apiKey = $K
+      - pattern: "OpenAIClient(..., apiKey: $K, ...)"
+      - pattern: "AnthropicClient(..., apiKey: $K, ...)"

@@ -1,0 +1,25 @@
+{
+  "name": "security-kit",
+  "private": true,
+  "description": "Tailored, standards-based security for any application — web, Android, iOS — and the AI that writes it.",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*",
+    "site"
+  ],
+  "scripts": {
+    "build": "npm run build -w @seckit/core && npm run build -w @seckit/cli && npm run build -w @seckit/node && npm run build -w @seckit/web && npm run build -w @seckit/mcp && npm run build -w @seckit/ui",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "validate:kb": "npm run validate:kb -w @seckit/core",
+    "seckit": "tsx --tsconfig packages/cli/tsconfig.json packages/cli/src/bin.ts",
+    "ui": "npm run build -w @seckit/ui && node packages/ui/dist/server/bin.js",
+    "build:site": "npm run build -w @seckit/core && node packages/ui/scripts/build-app.mjs && npm run build -w @seckit/site"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

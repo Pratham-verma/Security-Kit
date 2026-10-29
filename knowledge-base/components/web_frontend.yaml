@@ -1,0 +1,232 @@
+id: web_frontend
+name: Web frontend
+description: Pages and scripts that run in the user's browser, and the HTTP headers that protect them.
+order: 25
+question: Does the app have a web frontend (pages rendered in a browser)?
+platforms: [web, backend]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    rendering:
+      title: How are pages rendered?
+      enum: [spa, server_rendered, static]
+    third_party_scripts:
+      title: Does the site load third-party scripts (analytics, chat widgets, ads, CDNs)?
+      type: boolean
+      default: true
+    user_html:
+      title: Do users submit rich text, HTML or Markdown that is shown to other people?
+      type: boolean
+      default: false
+
+threats:
+  - id: WEB-T1
+    title: Cross-site scripting (XSS)
+    stride: [T, I, E]
+    cwe: [CWE-79]
+
+  - id: WEB-T2
+    title: Clickjacking
+    stride: [T]
+    cwe: [CWE-1021]
+
+  - id: WEB-T3
+    title: Traffic downgraded to HTTP or intercepted (SSL stripping, mixed content)
+    stride: [I, T]
+    cwe: [CWE-319]
+
+  - id: WEB-T4
+    title: A compromised third-party script runs with full page access
+    stride: [T, I]
+    cwe: [CWE-829]
+    when:
+      third_party_scripts: [true]
+
+  - id: WEB-T5
+    title: Open redirects used for phishing or token theft
+    stride: [S]
+    cwe: [CWE-601]
+
+  - id: WEB-T6
+    title: Stored XSS through user-supplied rich content
+    stride: [T, E]
+    cwe: [CWE-79]
+    when:
+      user_html: [true]
+
+  - id: WEB-T7
+    title: Sensitive pages cached by browsers or shared proxies
+    stride: [I]
+    cwe: [CWE-525]
+
+controls:
+  - id: WEB-C1
+    title: Encode output by context and avoid dangerous DOM sinks
+    mitigates: [WEB-T1]
+    severity: critical
+    level: 1
+    platforms: [web]
+    standards:
+      asvs: [V5.3.1, V5.3.3, V5.2.4]
+      owasp_top10: [A03]
+      cwe: [CWE-79, CWE-95]
+    guidance: |
+      Let the framework escape output (React/Vue/Angular templates do this by default). Avoid
+      `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `dangerouslySetInnerHTML`,
+      `v-html`, `eval`, `new Function` and string arguments to `setTimeout`. If HTML must be
+      inserted, sanitize it with DOMPurify first.
+    ai_rule: >-
+      Never use innerHTML, outerHTML, insertAdjacentHTML, document.write, dangerouslySetInnerHTML,
+      v-html, eval or new Function with dynamic data; rely on framework escaping, and sanitize
+      with DOMPurify when HTML is unavoidable.
+    implement:
+      web: sanitizeHtml(), setSafeHtml(), enableTrustedTypes(), and safeUrl() for href/src values
+    verify:
+      - type: semgrep
+        description: No dynamic data flows into HTML sinks or eval.
+
+  - id: WEB-C2
+    title: Strict Content Security Policy
+    mitigates: [WEB-T1, WEB-T4]
+    severity: high
+    level: 1
+    platforms: [backend, web]
+    standards:
+      asvs: [V14.4.3]
+      owasp_top10: [A05]
+      cwe: [CWE-79, CWE-1021]
+    guidance: |
+      Send a CSP that allows scripts only from your origin plus per-request nonces — no
+      `unsafe-inline` or `unsafe-eval` for scripts — with `object-src 'none'`, `base-uri 'none'`
+      and `frame-ancestors 'none'`. Roll out with `Content-Security-Policy-Report-Only` first.
+    ai_rule: >-
+      Do not add inline scripts or event-handler attributes; scripts load from our origin or
+      carry the CSP nonce; never add unsafe-inline or unsafe-eval to script-src.
+    implement:
+      node: securityHeaders() sets a nonce-based CSP and exposes res.locals.cspNonce
+    verify:
+      - type: test
+        description: HTML responses carry a CSP without unsafe-inline/unsafe-eval in script-src.
+
+  - id: WEB-C3
+    title: Security headers (HSTS, nosniff, frame-ancestors, Referrer-Policy)
+    mitigates: [WEB-T2, WEB-T3]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V14.4.4, V14.4.5, V14.4.6, V14.4.7]
+      owasp_top10: [A05]
+      cwe: [CWE-1021, CWE-319, CWE-693]
+    guidance: |
+      Send `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`,
+      `X-Frame-Options: DENY` (and CSP `frame-ancestors 'none'`), `Referrer-Policy:
+      strict-origin-when-cross-origin`, and remove `X-Powered-By`.
+    ai_rule: >-
+      Keep the security-headers middleware on every response (HSTS, nosniff, frame-ancestors,
+      Referrer-Policy) and never remove or weaken it.
+    implement:
+      node: securityHeaders()
+    verify:
+      - type: test
+        description: Responses include HSTS, nosniff, X-Frame-Options and Referrer-Policy.
+
+  - id: WEB-C4
+    title: HTTPS everywhere, no mixed content
+    mitigates: [WEB-T3]
+    severity: high
+    level: 1
+    platforms: [backend, web]
+    standards:
+      asvs: [V9.1.1]
+      owasp_top10: [A02]
+      cwe: [CWE-319]
+    guidance: Redirect HTTP to HTTPS, load every resource over HTTPS, and enable HSTS.
+    ai_rule: Load every resource and call every API over https://; never hardcode http:// URLs except localhost in development.
+    verify:
+      - type: semgrep
+        description: No http:// resource or API URLs other than localhost.
+
+  - id: WEB-C5
+    title: Minimize third-party scripts and pin them with Subresource Integrity
+    mitigates: [WEB-T4]
+    severity: medium
+    level: 1
+    platforms: [web]
+    when:
+      third_party_scripts: [true]
+    standards:
+      asvs: [V14.2.3]
+      owasp_top10: [A08]
+      cwe: [CWE-829, CWE-353]
+    guidance: |
+      Self-host libraries where possible. For scripts from CDNs, add `integrity` and
+      `crossorigin` attributes. Providers that forbid SRI (e.g. js.stripe.com) must be
+      loaded from their official domain only.
+    ai_rule: >-
+      Prefer npm packages over CDN script tags; any external <script> must have integrity and
+      crossorigin attributes unless the provider forbids SRI.
+    verify:
+      - type: config
+        description: External script tags carry integrity attributes.
+
+  - id: WEB-C6
+    title: Allow only safe, relative redirect targets
+    mitigates: [WEB-T5]
+    severity: medium
+    level: 1
+    platforms: [backend, web]
+    standards:
+      asvs: [V5.1.5]
+      owasp_top10: [A01]
+      cwe: [CWE-601]
+    guidance: Redirect only to relative paths (starting with a single `/`) or to destinations on an allow-list; never to a URL taken straight from a query parameter.
+    ai_rule: >-
+      Never redirect to a URL taken directly from user input; accept only relative paths
+      starting with a single "/" or an allow-listed destination.
+    implement:
+      node: safeRedirectPath()
+      web: safeRedirectPath() for client-side redirects
+    verify:
+      - type: semgrep
+        description: No res.redirect() with request parameters.
+
+  - id: WEB-C7
+    title: Sanitize user-supplied HTML with an allow-list sanitizer
+    mitigates: [WEB-T6]
+    severity: high
+    level: 1
+    when:
+      user_html: [true]
+    standards:
+      asvs: [V5.2.1]
+      owasp_top10: [A03]
+      cwe: [CWE-79]
+    guidance: Sanitize rich text with DOMPurify (or an equivalent allow-list sanitizer) before storing or rendering it, and render Markdown with raw HTML disabled.
+    ai_rule: >-
+      Sanitize user-supplied HTML with DOMPurify before rendering, and render Markdown with
+      raw HTML disabled.
+    implement:
+      web: sanitizeHtml() or setSafeHtml()
+    verify:
+      - type: test
+        description: A stored <img src=x onerror=alert(1)> renders inert.
+
+  - id: WEB-C8
+    title: Prevent caching of sensitive responses
+    mitigates: [WEB-T7]
+    severity: medium
+    level: 2
+    platforms: [backend]
+    standards:
+      asvs: [V8.2.1]
+      cwe: [CWE-525]
+    guidance: "Send `Cache-Control: no-store` on pages and API responses that contain personal or sensitive data."
+    ai_rule: Responses containing personal or sensitive data must send Cache-Control no-store.
+    implement:
+      node: noStore(res)
+    verify:
+      - type: test
+        description: Account pages respond with Cache-Control no-store.

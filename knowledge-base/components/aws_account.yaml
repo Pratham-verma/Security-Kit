@@ -1,0 +1,407 @@
+id: aws_account
+name: AWS account and organization
+description: The AWS account itself — root user, IAM, organization guardrails, audit logging, monitoring and network defaults.
+category: cloud
+order: 200
+question: Does the app run on Amazon Web Services (AWS)?
+platforms: [cloud]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    organization:
+      title: Do you use AWS Organizations (more than one AWS account)?
+      type: boolean
+    federated_identity:
+      title: Do people sign in through IAM Identity Center or another identity provider (SSO)?
+      type: boolean
+
+threats:
+  - id: AWSACC-T1
+    title: Takeover of the root user or an administrator
+    description: The root user can do anything in the account, including closing it; a leaked password or key without MFA gives an attacker full control.
+    stride: [S, E]
+    cwe: [CWE-308, CWE-798]
+  - id: AWSACC-T2
+    title: Long-lived or over-privileged IAM credentials are abused
+    description: Old access keys, unused users and "*:*" policies turn one leaked secret into a full compromise.
+    stride: [S, E]
+    cwe: [CWE-250, CWE-269, CWE-798]
+  - id: AWSACC-T3
+    title: Attacker activity is not recorded or noticed
+    description: Without CloudTrail, Config and alerts, an intruder's API calls go unseen and cannot be investigated.
+    stride: [R]
+    cwe: [CWE-778]
+  - id: AWSACC-T4
+    title: Servers are reachable from the whole internet on admin ports
+    description: SSH, RDP or other admin ports open to 0.0.0.0/0 or ::/0 invite brute force and exploitation.
+    stride: [S, E]
+    cwe: [CWE-284]
+  - id: AWSACC-T5
+    title: Instance credentials stolen through the metadata service
+    description: IMDSv1 lets an SSRF bug in the app read the instance role's credentials.
+    stride: [I, E]
+    cwe: [CWE-918]
+  - id: AWSACC-T6
+    title: Resources shared with anyone through resource policies
+    description: Policies with a "*" principal or external access expose data and functions outside the account.
+    stride: [I, E]
+    cwe: [CWE-284]
+  - id: AWSACC-T7
+    title: One compromised workload account affects the whole organization
+    stride: [E]
+    cwe: [CWE-653]
+    when:
+      organization: [true]
+
+controls:
+  - id: AWSACC-C1
+    title: Lock down the root user (MFA, no access keys, no daily use)
+    mitigates: [AWSACC-T1]
+    severity: critical
+    level: 1
+    standards:
+      cis_aws: [Foundations 2.4, Foundations 2.5, Foundations 2.6, Foundations 2.7]
+      cwe: [CWE-308]
+    guidance: |
+      Turn on MFA for the root user (a hardware key or passkey for production), delete any root access keys,
+      and never use root for daily work — create an administrator through IAM Identity Center or IAM instead.
+      Keep the root email address and phone number current, and store the MFA device safely.
+    ai_rule: >-
+      Never create, use or reference root user access keys; infrastructure code and scripts must use IAM roles,
+      and any instruction that requires the root user must be flagged for a human.
+    verify:
+      - type: manual
+        description: Root has MFA, no access keys, and no recent sign-ins in CloudTrail.
+    tests:
+      - "`aws iam get-account-summary --query 'SummaryMap.[AccountMFAEnabled,AccountAccessKeysPresent]'` returns `[1, 0]`."
+      - "CloudTrail event history filtered by user name `root` shows no console sign-ins or API calls in the last 90 days (except account tasks only root can do)."
+      - "In the root user's security credentials page, the MFA device is a hardware key or passkey (production accounts)."
+
+  - id: AWSACC-C2
+    title: MFA for every person, and a strong password policy
+    mitigates: [AWSACC-T1, AWSACC-T2]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Foundations 2.8, Foundations 2.9, Foundations 2.10]
+      asvs: [V2.1.1, V2.8.1]
+      cwe: [CWE-308, CWE-521]
+    guidance: |
+      Every human who can sign in to the console must use MFA. If you still have IAM users with passwords,
+      require at least 14 characters and block reuse of the last 24 passwords. Better: move people to IAM
+      Identity Center (SSO) and remove IAM user passwords entirely.
+    ai_rule: >-
+      Never create IAM users with console passwords in infrastructure code; grant people access through
+      IAM Identity Center or an identity provider with MFA, and give workloads IAM roles.
+    verify:
+      - type: manual
+        description: Credential report shows MFA for every user with a password; password policy meets the minimums.
+    tests:
+      - "`aws iam get-account-password-policy` shows `MinimumPasswordLength` ≥ 14 and `PasswordReusePrevention` ≥ 24 (or there are no IAM users with passwords)."
+      - "`aws iam generate-credential-report` then `aws iam get-credential-report --query Content --output text | base64 -d`: every row with `password_enabled=true` has `mfa_active=true`."
+
+  - id: AWSACC-C3
+    title: No long-lived, unused or unrotated access keys
+    mitigates: [AWSACC-T2]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Foundations 2.11, Foundations 2.12, Foundations 2.16]
+      cwe: [CWE-798, CWE-324]
+    guidance: |
+      Applications on AWS should use roles (instance profiles, task roles, Lambda execution roles), never
+      access keys. Disable credentials unused for 45 days, rotate any remaining keys at least every 90 days,
+      and prefer short-lived credentials from SSO or `sts:AssumeRole` for people and CI.
+    ai_rule: >-
+      Never put AWS access keys in code, config files, environment files or CI variables; use IAM roles
+      (instance profile, task role, execution role) or OIDC federation for CI.
+    verify:
+      - type: manual
+        description: No active key older than 90 days; no credentials unused for 45+ days; workloads use roles.
+    tests:
+      - "Credential report: no `access_key_1_last_rotated`/`access_key_2_last_rotated` older than 90 days on active keys, and no `*_last_used_date` / `password_last_used` older than 45 days on enabled credentials."
+      - "`aws ec2 describe-instances --query 'Reservations[].Instances[].[InstanceId,IamInstanceProfile.Arn]'` — every instance that calls AWS has an instance profile."
+      - "CI uses OIDC (e.g. GitHub Actions `aws-actions/configure-aws-credentials` with `role-to-assume`), not stored keys."
+
+  - id: AWSACC-C4
+    title: Least privilege — no "*:*" admin policies on workloads or users
+    mitigates: [AWSACC-T2]
+    severity: critical
+    level: 1
+    standards:
+      cis_aws: [Foundations 2.13, Foundations 2.14, Foundations 2.20, Compute 12.4, Compute 12.5, Compute 12.9]
+      owasp_top10: [A01]
+      cwe: [CWE-250, CWE-269]
+    guidance: |
+      Grant permissions through groups or permission sets, scoped to the actions and resources each role
+      needs. Never attach a policy allowing `"Action": "*"` on `"Resource": "*"` to a workload role or user.
+      Give each Lambda function, ECS task and instance its own role. Use IAM Access Analyzer policy
+      generation to tighten roles from real usage.
+    ai_rule: >-
+      IAM policies you write must list specific actions and resources; never use "Action": "*" with
+      "Resource": "*", and give each function, task or instance its own narrowly scoped role.
+    verify:
+      - type: semgrep
+        description: No IaC policy documents allowing every action on every resource.
+      - type: manual
+        description: No custom or attached policy grants "*:*" except to a break-glass admin role.
+    tests:
+      - "`aws iam list-entities-for-policy --policy-arn arn:aws:iam::aws:policy/AdministratorAccess` lists only the intended admin roles or permission sets — no workload roles or IAM users."
+      - "For each customer-managed policy (`aws iam list-policies --scope Local`), `aws iam get-policy-version` shows no statement with `Effect: Allow`, `Action: *` and `Resource: *`."
+      - "`aws iam list-users` then `aws iam list-attached-user-policies` / `list-user-policies`: users have no directly attached policies (permissions come from groups)."
+
+  - id: AWSACC-C5
+    title: No resource policies open to everyone; Access Analyzer on
+    mitigates: [AWSACC-T6]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Foundations 2.18, Foundations 2.21, Compute 12.6, Compute 12.10]
+      owasp_top10: [A01]
+      cwe: [CWE-284]
+    guidance: |
+      Enable IAM Access Analyzer in every region you use and review its findings. Resource policies (S3,
+      KMS, SQS, SNS, Lambda, ECR, Secrets Manager) must not allow `"Principal": "*"` unless a condition
+      restricts it (for example `aws:SourceAccount`, `aws:SourceArn` or `aws:PrincipalOrgID`).
+    ai_rule: >-
+      Never write a resource policy with "Principal": "*" unless it has a restricting condition such as
+      aws:PrincipalOrgID, aws:SourceArn or aws:SourceAccount.
+    verify:
+      - type: semgrep
+        description: No IaC resource permissions granted to principal "*".
+      - type: manual
+        description: Access Analyzer has no active findings for unintended external access.
+    tests:
+      - "`aws accessanalyzer list-analyzers --region <each region>` returns an active analyzer."
+      - "`aws accessanalyzer list-findings --analyzer-arn <arn> --filter '{\"status\":{\"eq\":[\"ACTIVE\"]}}'` returns no unexpected public or cross-account findings."
+      - "`aws lambda get-policy --function-name <fn>` has no statement with `\"Principal\": \"*\"` and no condition."
+
+  - id: AWSACC-C6
+    title: CloudTrail in all regions, validated and encrypted
+    mitigates: [AWSACC-T3]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Foundations 4.1, Foundations 4.2, Foundations 4.4, Foundations 4.5]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: |
+      Create a multi-region trail (an organization trail if you use Organizations) that records management
+      events, with log file validation on, delivered to an S3 bucket with access logging, and encrypted with a
+      customer-managed KMS key. Protect the bucket so only the security team can read and nobody can delete.
+    ai_rule: >-
+      Infrastructure code must keep a multi-region CloudTrail with log file validation and KMS encryption; never
+      disable or narrow existing trails.
+    verify:
+      - type: semgrep
+        description: IaC trails are multi-region, validated and KMS-encrypted.
+    tests:
+      - "`aws cloudtrail describe-trails --query 'trailList[].[Name,IsMultiRegionTrail,LogFileValidationEnabled,KmsKeyId]'` shows at least one trail with `true`, `true` and a KMS key."
+      - "`aws cloudtrail get-trail-status --name <trail>` shows `IsLogging: true`."
+      - "`aws cloudtrail get-event-selectors --trail-name <trail>` includes management events (read and write)."
+      - "`aws s3api get-bucket-logging --bucket <trail-bucket>` returns a logging target."
+
+  - id: AWSACC-C7
+    title: AWS Config, Security Hub and GuardDuty turned on
+    mitigates: [AWSACC-T3]
+    severity: medium
+    level: 1
+    standards:
+      cis_aws: [Foundations 4.3, Foundations 5.16]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: |
+      Record configuration changes with AWS Config in every region you use, enable Security Hub (with the CIS
+      AWS Foundations standard) to score the account continuously, and enable GuardDuty for threat detection.
+      Send their findings to a place someone actually watches.
+    ai_rule: Keep AWS Config, Security Hub and GuardDuty enabled in infrastructure code; never remove them to save cost without a human decision.
+    verify:
+      - type: manual
+        description: Config recorder, Security Hub and GuardDuty are active in each used region.
+    tests:
+      - "`aws configservice describe-configuration-recorder-status` shows `recording: true` and `lastStatus: SUCCESS` in each region you use."
+      - "`aws securityhub describe-hub` succeeds, and `aws securityhub get-enabled-standards` includes the CIS AWS Foundations Benchmark."
+      - "`aws guardduty list-detectors` returns a detector, and `aws guardduty get-detector --detector-id <id>` shows `Status: ENABLED`."
+
+  - id: AWSACC-C8
+    title: Alarms on dangerous account activity
+    mitigates: [AWSACC-T3]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Foundations 5.1, Foundations 5.2, Foundations 5.3, Foundations 5.4, Foundations 5.5, Foundations 5.6, Foundations 5.7, Foundations 5.8, Foundations 5.9, Foundations 5.10, Foundations 5.11, Foundations 5.12, Foundations 5.13, Foundations 5.14, Foundations 5.15]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: |
+      Alert on: root user activity, console sign-in without MFA, failed console sign-ins, unauthorized API
+      calls, and changes to IAM policies, CloudTrail, AWS Config, KMS keys (disable/delete), S3 bucket
+      policies, security groups, network ACLs, gateways, route tables, VPCs and AWS Organizations. Use
+      CloudWatch metric filters on the CloudTrail log group with alarms, or EventBridge rules — routed to SNS,
+      chat or your incident tool.
+    ai_rule: >-
+      When changing logging or monitoring infrastructure, keep alerts for root usage, IAM, CloudTrail, Config,
+      KMS, security group, NACL, route table, gateway and VPC changes.
+    verify:
+      - type: manual
+        description: An alarm or EventBridge rule exists for each listed event, and it reaches a person.
+    tests:
+      - "`aws logs describe-metric-filters --log-group-name <cloudtrail-log-group>` contains filters for root usage, sign-in without MFA, unauthorized calls, and IAM/CloudTrail/Config/KMS/S3-policy/security-group/NACL/gateway/route-table/VPC/Organizations changes — or `aws events list-rules` shows equivalent EventBridge rules."
+      - "`aws cloudwatch describe-alarms --alarm-name-prefix <prefix>` shows an alarm per filter with an SNS action, and `aws sns list-subscriptions-by-topic` shows a confirmed subscriber."
+      - "Trigger a harmless test (e.g. a failed console sign-in) and confirm the alert arrives."
+
+  - id: AWSACC-C9
+    title: Customer-managed KMS keys rotate automatically
+    mitigates: [AWSACC-T3, AWSACC-T6]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Foundations 4.6]
+      cwe: [CWE-324]
+    guidance: Enable automatic rotation on every customer-managed symmetric KMS key, and restrict key policies to the roles that need each key.
+    ai_rule: Every customer-managed symmetric KMS key in infrastructure code must set enable_key_rotation (EnableKeyRotation) to true.
+    verify:
+      - type: semgrep
+        description: IaC KMS keys enable rotation.
+    tests:
+      - "For each key from `aws kms list-keys` that `aws kms describe-key` shows as `KeyManager: CUSTOMER` and `KeySpec: SYMMETRIC_DEFAULT`, `aws kms get-key-rotation-status --key-id <id>` returns `KeyRotationEnabled: true`."
+
+  - id: AWSACC-C10
+    title: No admin ports open to the internet (security groups and NACLs)
+    mitigates: [AWSACC-T4]
+    severity: critical
+    level: 1
+    standards:
+      cis_aws: [Foundations 6.1.2, Foundations 6.2, Foundations 6.3, Foundations 6.4, Compute 5.3, Compute 5.4, Compute 5.5]
+      owasp_top10: [A05]
+      cwe: [CWE-284]
+    guidance: |
+      Never allow 0.0.0.0/0 or ::/0 to SSH (22), RDP (3389), CIFS/SMB (445) or other admin ports. Use AWS
+      Systems Manager Session Manager instead of SSH/RDP, or restrict to a VPN or bastion range.
+    ai_rule: >-
+      Never write security group or network ACL rules that open ports 22, 3389, 445 or port ranges containing
+      them to 0.0.0.0/0 or ::/0; use SSM Session Manager or a specific trusted CIDR.
+    verify:
+      - type: semgrep
+        description: IaC security groups do not open admin ports to the internet.
+    tests:
+      - "`aws ec2 describe-security-groups --filters Name=ip-permission.cidr,Values=0.0.0.0/0 --query 'SecurityGroups[].[GroupId,IpPermissions]'` — no rule covering port 22, 3389 or 445."
+      - "`aws ec2 describe-security-groups --filters Name=ip-permission.ipv6-cidr,Values=::/0` — the same for IPv6."
+      - "`aws ec2 describe-network-acls --query 'NetworkAcls[].Entries[?RuleAction==`allow` && Egress==`false`]'` — no allow entry from 0.0.0.0/0 or ::/0 covering 22 or 3389."
+
+  - id: AWSACC-C11
+    title: The default security group allows nothing
+    mitigates: [AWSACC-T4]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Foundations 6.5, Compute 2.7]
+      cwe: [CWE-1188]
+    guidance: Remove all rules from each VPC's default security group and attach purpose-built groups to resources instead.
+    ai_rule: Never attach the default security group to resources, and keep it without inbound or outbound rules.
+    verify:
+      - type: semgrep
+        description: IaC does not add rules to the default security group.
+    tests:
+      - "`aws ec2 describe-security-groups --filters Name=group-name,Values=default --query 'SecurityGroups[].[VpcId,IpPermissions,IpPermissionsEgress]'` — both rule lists are empty in every VPC."
+      - "`aws ec2 describe-network-interfaces --filters Name=group-name,Values=default` returns no interfaces."
+
+  - id: AWSACC-C12
+    title: IMDSv2 required on every instance
+    mitigates: [AWSACC-T5]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Foundations 6.7, Compute 2.8]
+      cwe: [CWE-918]
+    guidance: |
+      Require session tokens for the instance metadata service (IMDSv2) on all instances and launch templates,
+      and set it as the account default per region, so an SSRF bug cannot read instance credentials.
+    ai_rule: >-
+      Every EC2 instance and launch template you define must set metadata_options http_tokens = "required"
+      (MetadataOptions HttpTokens: required).
+    verify:
+      - type: semgrep
+        description: IaC instances and launch templates require IMDSv2.
+    tests:
+      - "`aws ec2 describe-instances --query 'Reservations[].Instances[].[InstanceId,MetadataOptions.HttpTokens]'` shows `required` for every instance."
+      - "`aws ec2 get-instance-metadata-defaults` shows `HttpTokens: required` in each region you use."
+
+  - id: AWSACC-C13
+    title: VPC flow logs and private service endpoints
+    mitigates: [AWSACC-T3, AWSACC-T4]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Foundations 4.7, Foundations 6.6, Foundations 6.8, Compute 6.1]
+      cwe: [CWE-778]
+    guidance: |
+      Enable flow logs (at least rejected traffic) on every VPC. Reach S3, DynamoDB and other AWS services
+      through VPC endpoints instead of the internet, and keep peering route tables limited to the subnets that
+      need each other.
+    ai_rule: New VPCs in infrastructure code get flow logs and VPC endpoints for the AWS services the app uses.
+    verify:
+      - type: manual
+        description: Every VPC has an active flow log; endpoints exist for used services.
+    tests:
+      - "For each VPC from `aws ec2 describe-vpcs`, `aws ec2 describe-flow-logs --filter Name=resource-id,Values=<vpc-id>` returns an active flow log."
+      - "`aws ec2 describe-vpc-endpoints --query 'VpcEndpoints[].[VpcId,ServiceName,State]'` lists endpoints for the services the app calls (e.g. s3, dynamodb, secretsmanager)."
+
+  - id: AWSACC-C14
+    title: Account contacts and an incident support path
+    mitigates: [AWSACC-T3]
+    severity: low
+    level: 2
+    standards:
+      cis_aws: [Foundations 2.2, Foundations 2.3, Foundations 2.15]
+      cwe: [CWE-778]
+    guidance: Keep the account's primary and security contacts current (a shared team address, not a person) and create a role that can open AWS Support cases during an incident.
+    ai_rule: Do not remove the AWS Support incident role or account security contact from infrastructure code.
+    verify:
+      - type: manual
+        description: Security contact is set to a monitored team address; a support role exists.
+    tests:
+      - "`aws account get-alternate-contact --alternate-contact-type SECURITY` returns a monitored team address."
+      - "`aws iam list-entities-for-policy --policy-arn arn:aws:iam::aws:policy/AWSSupportAccess` returns at least one role."
+
+  - id: AWSACC-C15
+    title: Organization guardrails (SCPs) and separate accounts per environment
+    mitigates: [AWSACC-T7, AWSACC-T1]
+    severity: high
+    level: 2
+    when:
+      organization: [true]
+    standards:
+      cis_aws: [Foundations 2.1.1, Foundations 2.1.2, Foundations 2.1.3, Foundations 2.1.4, Foundations 2.1.5, Foundations 2.1.6]
+      cwe: [CWE-653]
+    guidance: |
+      Run workloads in member accounts grouped into OUs by environment and sensitivity — never in the
+      management account. Centralize root access management, and apply service control policies that
+      prevent disabling CloudTrail, GuardDuty and Config, leaving approved regions, or creating IAM user keys.
+      Delegate administration of security services to a security account.
+    ai_rule: Never deploy workloads to the AWS Organizations management account, and never weaken or remove service control policies.
+    verify:
+      - type: manual
+        description: SCPs exist and are attached; the management account has no workloads.
+    tests:
+      - "`aws organizations list-policies --filter SERVICE_CONTROL_POLICY` lists guardrail SCPs, and `aws organizations list-targets-for-policy` shows them attached to the workload OUs."
+      - "`aws organizations list-delegated-administrators` shows a security account administering security services."
+      - "The management account has no EC2, ECS, Lambda or RDS resources (`aws resourcegroupstaggingapi get-resources` in that account is empty apart from org tooling)."
+
+  - id: AWSACC-C16
+    title: People sign in through central identity (SSO)
+    mitigates: [AWSACC-T2]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Foundations 2.19]
+      cwe: [CWE-287]
+    guidance: Manage human access with IAM Identity Center or federation to your identity provider, with MFA and short sessions; remove IAM users for people.
+    ai_rule: Grant human access through IAM Identity Center permission sets, not IAM users.
+    verify:
+      - type: manual
+        description: No IAM users exist for people; Identity Center or federation is configured.
+    tests:
+      - "`aws sso-admin list-instances` returns an Identity Center instance (or an IAM SAML/OIDC provider exists: `aws iam list-saml-providers` / `list-open-id-connect-providers`)."
+      - "`aws iam list-users` contains only break-glass or service users, each documented."

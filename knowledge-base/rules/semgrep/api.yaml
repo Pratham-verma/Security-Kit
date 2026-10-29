@@ -1,0 +1,232 @@
+rules:
+  - id: seckit.api-c3.mass-assignment
+    message: "The whole request body is written to the database (mass assignment). Pick allowed fields with a validated schema."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [API-C3]
+      cwe: CWE-915
+    pattern-either:
+      - pattern: $M.create(req.body, ...)
+      - pattern: $M.update(req.body, ...)
+      - pattern: $M.insert(req.body, ...)
+      - pattern: $M.findByIdAndUpdate($ID, req.body, ...)
+      - pattern: $M.updateOne($F, req.body, ...)
+      - pattern: $M.findOneAndUpdate($F, req.body, ...)
+      - pattern: '$M.create({..., data: req.body, ...})'
+      - pattern: '$M.update({..., data: req.body, ...})'
+      - pattern: '$M.upsert({..., create: req.body, ...})'
+      - pattern: Object.assign($X, req.body)
+      - pattern: new $M(req.body)
+
+  - id: seckit.api-c6.permissive-cors
+    message: "CORS allows any origin or reflects the request Origin. Use an explicit origin allow-list (strictCors() in @seckit/node)."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [API-C6]
+      cwe: CWE-942
+    pattern-either:
+      - pattern: cors()
+      - pattern: "cors({..., origin: true, ...})"
+      - pattern: "cors({..., origin: '*', ...})"
+      - pattern: '$RES.setHeader("Access-Control-Allow-Origin", req.headers.origin)'
+      - pattern: '$RES.header("Access-Control-Allow-Origin", req.headers.origin)'
+      - pattern: '$RES.set("Access-Control-Allow-Origin", req.headers.origin)'
+
+  - id: seckit.api-c5.ssrf-user-url
+    message: "Request-supplied URL fetched directly (SSRF). Use safeFetch() from @seckit/node or validate against an allow-list."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [API-C5]
+      cwe: CWE-918
+    patterns:
+      - pattern-either:
+          - pattern: fetch(req.$S.$P, ...)
+          - pattern: axios(req.$S.$P, ...)
+          - pattern: axios.$M(req.$S.$P, ...)
+          - pattern: got(req.$S.$P, ...)
+          - pattern: got.$M(req.$S.$P, ...)
+          - pattern: http.get(req.$S.$P, ...)
+          - pattern: https.get(req.$S.$P, ...)
+      - metavariable-regex:
+          metavariable: $S
+          regex: ^(body|query|params)$
+
+  - id: seckit.api-c8.error-details-in-response
+    message: "Error details or stack traces sent to the client. Return a generic message with a request ID and log details server-side."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [API-C8, LOG-C6]
+      cwe: CWE-209
+    patterns:
+      - pattern-either:
+          - pattern: $RES.send($E.stack)
+          - pattern: $RES.status($C).send($E.stack)
+          - pattern: "$RES.json({..., $K: $E.stack, ...})"
+          - pattern: "$RES.status($C).json({..., $K: $E.stack, ...})"
+          - pattern: $RES.status($C).send($E)
+          - pattern: $RES.status($C).json($E)
+          - pattern: $RES.send($E)
+      - metavariable-regex:
+          metavariable: $E
+          regex: ^(err|error|e|ex|exception)$
+
+  - id: seckit.api-c7.graphql-introspection-enabled
+    message: "GraphQL introspection explicitly enabled. Disable it in production."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [API-C7]
+      cwe: CWE-200
+    pattern: "new ApolloServer({..., introspection: true, ...})"
+
+  - id: seckit.api-c5.python-ssrf-user-url
+    message: "Request-supplied URL fetched directly (SSRF). Validate against an allow-list and block private addresses."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [API-C5]
+      cwe: CWE-918
+    patterns:
+      - pattern-either:
+          - pattern: requests.$M(request.$A.get(...), ...)
+          - pattern: requests.$M(request.$A[...], ...)
+          - pattern: httpx.$M(request.$A.get(...), ...)
+          - pattern: httpx.$M(request.$A[...], ...)
+          - pattern: urllib.request.urlopen(request.$A.get(...), ...)
+          - pattern: urlopen(request.$A.get(...), ...)
+      - metavariable-regex:
+          metavariable: $A
+          regex: ^(args|form|json|values|GET|POST|data|query_params)$
+
+  - id: seckit.api-c3.python-mass-assignment
+    message: "Request data unpacked straight into a model, or a serializer/form exposing all fields. List allowed fields explicitly."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [API-C3]
+      cwe: CWE-915
+    pattern-either:
+      - pattern: $M.objects.create(**request.$A)
+      - pattern: $M.objects.create(**request.get_json())
+      - pattern: $Q.update(**request.$A)
+      - pattern: $M(**request.$A)
+      - pattern: $M(**request.get_json())
+      - pattern: |
+          class $S(...):
+            ...
+            class Meta:
+              ...
+              fields = "__all__"
+
+  - id: seckit.api-c8.python-debug-enabled
+    message: "Debug mode enabled. Flask's debugger allows remote code execution; Django DEBUG leaks settings and stack traces."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [API-C8, LOG-C6]
+      cwe: CWE-489
+    pattern-either:
+      - pattern: $APP.run(..., debug=True, ...)
+      - patterns:
+          - pattern: DEBUG = True
+          - pattern-inside: |
+              SECRET_KEY = ...
+              ...
+
+  - id: seckit.api-c8.python-traceback-in-response
+    message: "Traceback returned to the client. Return a generic message with a request ID and log details server-side."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      seckit-controls: [API-C8, LOG-C6]
+      cwe: CWE-209
+    pattern: return <... traceback.format_exc() ...>
+
+  - id: seckit.api-c6.spring-permissive-cors
+    message: "CORS allows any origin (a bare @CrossOrigin defaults to \"*\"). List the exact origins that may call this API."
+    severity: WARNING
+    languages: [java, kotlin]
+    metadata:
+      seckit-controls: [API-C6]
+      cwe: CWE-942
+    pattern-either:
+      - pattern-regex: |-
+          @CrossOrigin\b(?!\s*\()|@CrossOrigin\s*\(\s*\)|@CrossOrigin\s*\(\s*((origins|value|originPatterns)\s*=\s*)?[\[{]?\s*"\*"
+      - pattern-regex: |-
+          \.(allowedOrigins|allowedOriginPatterns|addAllowedOrigin|addAllowedOriginPattern)\(\s*"\*"\s*\)|\.(setAllowedOrigins|setAllowedOriginPatterns)\(\s*(List\.of|listOf|Arrays\.asList|Collections\.singletonList)\(\s*"\*"\s*\)\s*\)
+
+  - id: seckit.api-c5.spring-ssrf-user-url
+    message: "Request-supplied URL fetched directly (SSRF). Validate it against an allow-list and block private and metadata addresses."
+    severity: ERROR
+    languages: [java]
+    metadata:
+      seckit-controls: [API-C5]
+      cwe: CWE-918
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: '$RET $M(..., @RequestParam(...) $T $P, ...) { ... }'
+              - pattern: '$RET $M(..., @RequestParam $T $P, ...) { ... }'
+              - pattern: '$RET $M(..., @PathVariable(...) $T $P, ...) { ... }'
+              - pattern: '$RET $M(..., @PathVariable $T $P, ...) { ... }'
+              - pattern: '$RET $M(..., @RequestBody $T $P, ...) { ... }'
+          - focus-metavariable: $P
+      - pattern: (HttpServletRequest $REQ).getParameter(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new URL($U)
+              - pattern: new URL($U).openConnection()
+              - pattern: URI.create($U)
+              - pattern: new URI($U)
+              - pattern: $RT.getForObject($U, ...)
+              - pattern: $RT.getForEntity($U, ...)
+              - pattern: $RT.postForObject($U, ...)
+              - pattern: $RT.postForEntity($U, ...)
+              - pattern: $RT.exchange($U, ...)
+              - pattern: $RT.headForHeaders($U, ...)
+              - pattern: $WC.get().uri($U, ...)
+              - pattern: $WC.post().uri($U, ...)
+              - pattern: $WC.method(...).uri($U, ...)
+              - pattern: Jsoup.connect($U)
+          - focus-metavariable: $U
+
+  - id: seckit.api-c2.spring-permit-all-requests
+    message: "Every request is allowed by default. Authorize by default (anyRequest().authenticated()) and open specific public paths with requestMatchers(...).permitAll()."
+    severity: WARNING
+    languages: [java, kotlin]
+    metadata:
+      seckit-controls: [API-C2]
+      cwe: CWE-862
+    pattern-either:
+      - pattern: $A.anyRequest().permitAll()
+      - pattern: $A.requestMatchers("/**").permitAll()
+      - pattern: $A.antMatchers("/**").permitAll()
+      - pattern: $A.ignoring().anyRequest()
+      - pattern: authorize(anyRequest, permitAll)
+
+  - id: seckit.api-c8.spring-exception-message-in-response
+    message: "Exception message returned to the client (leaks SQL, paths and internals). Return a generic message with a request ID and log the details."
+    severity: WARNING
+    languages: [java]
+    metadata:
+      seckit-controls: [API-C8, LOG-C6]
+      cwe: CWE-209
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              try { ... } catch ($EX $E) { ... }
+          - pattern-inside: |
+              @ExceptionHandler(...)
+              $RET $M(..., $EX $E, ...) { ... }
+      - pattern-either:
+          - pattern: return <... $E.getMessage() ...>;
+          - pattern: return <... $E.getLocalizedMessage() ...>;
+          - pattern: return <... $E.toString() ...>;
+          - pattern: $E.printStackTrace($RESP.getWriter())
+          - pattern: ResponseEntity.$S(...).body(<... $E.getMessage() ...>)

@@ -1,0 +1,250 @@
+id: session
+name: Sessions and tokens
+description: How a logged-in user stays logged in — server sessions, JWTs or opaque tokens, sent as cookies or headers.
+order: 20
+question: Does the app keep users logged in between requests (sessions, cookies or tokens)?
+platforms: [web, backend, android, ios]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    kind:
+      title: How is the logged-in state represented?
+      enum: [server_session, jwt, opaque_token]
+    transport:
+      title: How does the client send it with each request?
+      enum: [cookie, authorization_header]
+
+threats:
+  - id: SESS-T1
+    title: Token theft through XSS when tokens are readable by JavaScript
+    stride: [S, I]
+    cwe: [CWE-922]
+
+  - id: SESS-T2
+    title: Token leakage over the network, in URLs or through insecure cookies
+    stride: [I]
+    cwe: [CWE-614, CWE-598]
+
+  - id: SESS-T3
+    title: Cross-site request forgery on cookie-authenticated requests
+    stride: [T]
+    cwe: [CWE-352]
+    when:
+      transport: [cookie]
+
+  - id: SESS-T4
+    title: Sessions that never expire or cannot be revoked
+    stride: [S]
+    cwe: [CWE-613]
+
+  - id: SESS-T5
+    title: Forged or tampered JWTs (alg=none, algorithm confusion, weak signing keys)
+    stride: [S, T]
+    cwe: [CWE-347]
+    when:
+      kind: [jwt]
+
+  - id: SESS-T6
+    title: Predictable session identifiers
+    stride: [S]
+    cwe: [CWE-330]
+    when:
+      kind: [server_session, opaque_token]
+
+  - id: SESS-T7
+    title: A hijacked session is used to take over the account (change email or password)
+    stride: [S, E]
+    cwe: [CWE-620]
+
+controls:
+  - id: SESS-C1
+    title: Secure cookie attributes (Secure, HttpOnly, SameSite, __Host- prefix)
+    mitigates: [SESS-T1, SESS-T2, SESS-T3]
+    severity: high
+    level: 1
+    platforms: [backend]
+    when:
+      transport: [cookie]
+    standards:
+      asvs: [V3.4.1, V3.4.2, V3.4.3, V3.4.4]
+      owasp_top10: [A05]
+      cwe: [CWE-614, CWE-1004, CWE-1275]
+    guidance: |
+      Session cookies must be `Secure`, `HttpOnly`, `SameSite=Lax` (or `Strict`), use the
+      `__Host-` prefix with `Path=/` and no `Domain` attribute.
+    ai_rule: >-
+      Session cookies must be Secure, HttpOnly, SameSite=Lax or Strict, and use the __Host-
+      prefix with Path=/ and no Domain attribute.
+    implement:
+      node: sessionCookieOptions() and SESSION_COOKIE_NAME
+    verify:
+      - type: test
+        description: The login response's Set-Cookie header carries all required attributes.
+
+  - id: SESS-C2
+    title: CSRF protection for state-changing requests
+    mitigates: [SESS-T3]
+    severity: high
+    level: 1
+    platforms: [backend, web]
+    when:
+      transport: [cookie]
+    standards:
+      asvs: [V4.2.2, V13.2.3]
+      owasp_top10: [A01]
+      cwe: [CWE-352]
+    guidance: |
+      SameSite cookies are defense in depth, not a complete fix. Protect every state-changing
+      request (POST/PUT/PATCH/DELETE) with a synchronizer or double-submit token, or by
+      verifying the `Origin`/`Sec-Fetch-Site` headers. Never change state on GET.
+    ai_rule: >-
+      Every state-changing endpoint on cookie-authenticated routes needs CSRF protection
+      (token or Origin/Sec-Fetch-Site check); never change state on GET requests.
+    implement:
+      node: originCheck() middleware
+    verify:
+      - type: test
+        description: A cross-origin POST without a valid CSRF token is rejected.
+
+  - id: SESS-C3
+    title: Keep browser tokens out of localStorage
+    mitigates: [SESS-T1]
+    severity: high
+    level: 1
+    platforms: [web]
+    when:
+      transport: [authorization_header]
+    standards:
+      asvs: [V3.2.3, V8.2.2]
+      owasp_top10: [A07]
+      cwe: [CWE-922]
+    guidance: |
+      Any XSS can read `localStorage` and `sessionStorage`. Prefer a backend-for-frontend with
+      HttpOnly cookies; otherwise keep access tokens in memory only, with short lifetimes,
+      and use refresh-token rotation.
+    ai_rule: >-
+      Never store access or refresh tokens in localStorage or sessionStorage; keep them in
+      memory or use HttpOnly cookies via a backend-for-frontend.
+    implement:
+      web: createTokenStore() keeps tokens in memory and sends them only to API origins
+    verify:
+      - type: semgrep
+        description: No localStorage/sessionStorage.setItem with token-like keys.
+
+  - id: SESS-C4
+    title: Idle and absolute timeouts; server-side logout and revocation
+    mitigates: [SESS-T4]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V3.3.1, V3.3.2, V3.3.3]
+      owasp_top10: [A07]
+      cwe: [CWE-613]
+    guidance: |
+      Expire sessions after inactivity and after a maximum lifetime. Logout must invalidate
+      the session or refresh token on the server, not only on the client. Offer to end all
+      other sessions after a password change.
+    ai_rule: >-
+      Sessions need an idle timeout and an absolute lifetime; logout and password changes must
+      invalidate sessions or refresh tokens server-side, not just delete them on the client.
+    verify:
+      - type: test
+        description: A session token used after logout is rejected.
+
+  - id: SESS-C5
+    title: Strict JWT verification and short-lived tokens with rotating refresh tokens
+    mitigates: [SESS-T5, SESS-T4]
+    severity: critical
+    level: 1
+    when:
+      kind: [jwt]
+    standards:
+      asvs: [V3.5.3]
+      owasp_top10: [A02, A07]
+      cwe: [CWE-347, CWE-345]
+    guidance: |
+      Verify with an explicit algorithm allow-list (never accept `alg: none` or switch between
+      HMAC and RSA), and check `exp`, `nbf`, `iss` and `aud`. Use strong keys (asymmetric, or
+      HMAC secrets of at least 256 random bits) loaded from a secret store. Keep access tokens
+      short-lived (minutes) and rotate refresh tokens with reuse detection, so tokens can be revoked.
+    ai_rule: >-
+      Verify JWTs with an explicit algorithm allow-list and check exp, iss and aud; never
+      decode without verifying; keep access tokens short-lived and rotate refresh tokens with
+      reuse detection.
+    verify:
+      - type: semgrep
+        description: No jwt.decode used for authorization, no verify without algorithms option.
+      - type: test
+        description: Tokens with alg=none, a wrong audience or expired exp are rejected.
+
+  - id: SESS-C6
+    title: Session identifiers from a CSPRNG with at least 128 bits of entropy
+    mitigates: [SESS-T6]
+    severity: high
+    level: 1
+    platforms: [backend]
+    when:
+      kind: [server_session, opaque_token]
+    standards:
+      asvs: [V3.2.2]
+      owasp_top10: [A07]
+      cwe: [CWE-330, CWE-331]
+    guidance: Use your framework's session manager or crypto.randomBytes(32); never build IDs from timestamps, counters or user data.
+    ai_rule: >-
+      Generate session IDs and opaque tokens only with a CSPRNG (at least 128 bits) or the
+      framework's session manager; never derive them from time, counters or user data.
+    implement:
+      node: randomToken()
+    verify:
+      - type: semgrep
+        description: No Math.random() or Date.now() used to build tokens.
+
+  - id: SESS-C7
+    title: Never put session tokens in URLs
+    mitigates: [SESS-T2]
+    severity: medium
+    level: 1
+    standards:
+      asvs: [V3.1.1]
+      owasp_top10: [A07]
+      cwe: [CWE-598]
+    guidance: URLs leak through logs, browser history and the Referer header. Send tokens in cookies or the Authorization header.
+    ai_rule: Never put session tokens, access tokens or API keys in URL paths or query strings.
+    verify:
+      - type: semgrep
+        description: No token/session/api_key query parameters built into URLs.
+
+  - id: SESS-C8
+    title: Re-authenticate before sensitive account changes
+    mitigates: [SESS-T7]
+    severity: medium
+    level: 2
+    platforms: [backend]
+    standards:
+      asvs: [V3.7.1]
+      owasp_top10: [A07]
+      cwe: [CWE-620]
+    guidance: Changing the email, password, MFA settings or payout details requires the current password or a fresh MFA check.
+    ai_rule: >-
+      Changing email, password, MFA settings or payout details must require re-authentication
+      (current password or fresh MFA), even within a valid session.
+    verify:
+      - type: test
+        description: Password change without the current password is rejected.
+
+  - id: SESS-C9
+    title: Let users see and end their active sessions
+    mitigates: [SESS-T4]
+    severity: low
+    level: 2
+    standards:
+      asvs: [V3.3.4]
+      cwe: [CWE-613]
+    guidance: Show active sessions/devices and allow logging out of any of them.
+    ai_rule: Provide a way for users to list their active sessions and revoke any of them.
+    verify:
+      - type: manual
+        description: The account settings page lists sessions and revoking one invalidates it.

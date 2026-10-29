@@ -1,0 +1,1766 @@
+{
+  "generator": "seckit 0.0.1",
+  "app": {
+    "name": "security-kit",
+    "platforms": [
+      "web",
+      "backend"
+    ],
+    "data_sensitivity": "high",
+    "assurance_level": 2
+  },
+  "components": [
+    {
+      "type": "auth",
+      "options": {
+        "methods": [
+          "email_password",
+          "otp_sms"
+        ],
+        "mfa": "required"
+      },
+      "threats": [
+        {
+          "id": "AUTH-T1",
+          "title": "Credential stuffing and brute-force attacks",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-307"
+          ]
+        },
+        {
+          "id": "AUTH-T2",
+          "title": "Offline cracking of stolen password hashes",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-916"
+          ]
+        },
+        {
+          "id": "AUTH-T3",
+          "title": "Weak or previously breached passwords",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-521"
+          ]
+        },
+        {
+          "id": "AUTH-T4",
+          "title": "Account enumeration",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-204"
+          ]
+        },
+        {
+          "id": "AUTH-T5",
+          "title": "Session fixation after login",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-384"
+          ]
+        },
+        {
+          "id": "AUTH-T7",
+          "title": "One-time code guessing and SIM-swap interception",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-307",
+            "CWE-287"
+          ]
+        },
+        {
+          "id": "AUTH-T8",
+          "title": "Account takeover with a single compromised factor",
+          "stride": [
+            "S",
+            "E"
+          ],
+          "cwe": [
+            "CWE-308"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "AUTH-C2",
+          "title": "Hash passwords with Argon2id (or bcrypt/scrypt as fallback)",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.4.1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-916",
+              "CWE-759"
+            ],
+            "nist": [
+              "SP 800-63B 5.1.1.2"
+            ]
+          },
+          "ai_rule": "Hash passwords only with Argon2id from a maintained library (bcrypt or scrypt if unavailable); never use MD5/SHA-* for passwords and never store or log a plaintext password.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No md5/sha1/sha256 calls applied to password variables."
+            },
+            {
+              "type": "test",
+              "description": "Stored password values begin with the $argon2id$ prefix."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C1",
+          "title": "Rate-limit and throttle authentication attempts",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T1",
+            "AUTH-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.2.1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-307"
+            ]
+          },
+          "ai_rule": "Every login, OTP-verification and password-reset endpoint must be rate-limited per account and per IP; never write an authentication endpoint without throttling.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "N+1 rapid failed logins for one account are rejected or delayed."
+            },
+            {
+              "type": "semgrep",
+              "description": "Auth route handlers are registered behind a rate-limit middleware."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C3",
+          "title": "Enforce minimum length and block breached passwords",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.1.1",
+              "V2.1.7"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-521"
+            ],
+            "nist": [
+              "SP 800-63B 5.1.1.2"
+            ]
+          },
+          "ai_rule": "Password policy: minimum 12 characters, maximum at least 64, no composition rules, and reject passwords found in breach lists; validate on the server, not only the client.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "An 11-character password and a known-breached password are both rejected."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C5",
+          "title": "Issue a new session identifier on login",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.2.1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-384"
+            ]
+          },
+          "ai_rule": "On successful login or privilege change, regenerate the session ID / issue new tokens and invalidate the previous session.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Session cookie value changes after a successful login."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C7",
+          "title": "Short-lived, single-use, rate-limited one-time codes",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.7.2",
+              "V2.7.3"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-307"
+            ]
+          },
+          "ai_rule": "One-time codes: generate with a CSPRNG, expire in 10 minutes or less, single use, invalidate after 5 failed attempts, compare in constant time.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A used or expired code is rejected; the 6th wrong attempt invalidates the code."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C8",
+          "title": "Offer multi-factor authentication (require it at higher assurance)",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "web",
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T8"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-308"
+            ],
+            "masvs": [
+              "MASVS-AUTH-2"
+            ],
+            "nist": [
+              "SP 800-63B AAL2"
+            ]
+          },
+          "ai_rule": "Design authentication so a second factor (passkey/WebAuthn or TOTP) can be enforced; admin accounts must always require MFA.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "MFA enrollment exists and is enforced for admin roles."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C4",
+          "title": "Return identical responses for unknown and existing accounts",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T4"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-204"
+            ]
+          },
+          "ai_rule": "Login, signup and password-reset responses must not reveal whether an account exists: same message, same status code, comparable timing.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Reset request for unknown vs. known email returns identical status and body."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C9",
+          "title": "No security questions or password hints",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T1",
+            "AUTH-T8"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.5.2"
+            ],
+            "cwe": [
+              "CWE-640"
+            ]
+          },
+          "ai_rule": "Never implement security questions or password hints for account recovery.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Recovery flow uses a time-limited token sent to a verified channel only."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "web_frontend",
+      "options": {
+        "rendering": "server_rendered",
+        "third_party_scripts": true,
+        "user_html": false
+      },
+      "threats": [
+        {
+          "id": "WEB-T1",
+          "title": "Cross-site scripting (XSS)",
+          "stride": [
+            "T",
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-79"
+          ]
+        },
+        {
+          "id": "WEB-T2",
+          "title": "Clickjacking",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-1021"
+          ]
+        },
+        {
+          "id": "WEB-T3",
+          "title": "Traffic downgraded to HTTP or intercepted (SSL stripping, mixed content)",
+          "stride": [
+            "I",
+            "T"
+          ],
+          "cwe": [
+            "CWE-319"
+          ]
+        },
+        {
+          "id": "WEB-T4",
+          "title": "A compromised third-party script runs with full page access",
+          "stride": [
+            "T",
+            "I"
+          ],
+          "cwe": [
+            "CWE-829"
+          ]
+        },
+        {
+          "id": "WEB-T5",
+          "title": "Open redirects used for phishing or token theft",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-601"
+          ]
+        },
+        {
+          "id": "WEB-T7",
+          "title": "Sensitive pages cached by browsers or shared proxies",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-525"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "WEB-C1",
+          "title": "Encode output by context and avoid dangerous DOM sinks",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.3.1",
+              "V5.3.3",
+              "V5.2.4"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-79",
+              "CWE-95"
+            ]
+          },
+          "ai_rule": "Never use innerHTML, outerHTML, insertAdjacentHTML, document.write, dangerouslySetInnerHTML, v-html, eval or new Function with dynamic data; rely on framework escaping, and sanitize with DOMPurify when HTML is unavoidable.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No dynamic data flows into HTML sinks or eval."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C2",
+          "title": "Strict Content Security Policy",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T1",
+            "WEB-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.4.3"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-79",
+              "CWE-1021"
+            ]
+          },
+          "ai_rule": "Do not add inline scripts or event-handler attributes; scripts load from our origin or carry the CSP nonce; never add unsafe-inline or unsafe-eval to script-src.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "HTML responses carry a CSP without unsafe-inline/unsafe-eval in script-src."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C3",
+          "title": "Security headers (HSTS, nosniff, frame-ancestors, Referrer-Policy)",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "WEB-T2",
+            "WEB-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.4.4",
+              "V14.4.5",
+              "V14.4.6",
+              "V14.4.7"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-1021",
+              "CWE-319",
+              "CWE-693"
+            ]
+          },
+          "ai_rule": "Keep the security-headers middleware on every response (HSTS, nosniff, frame-ancestors, Referrer-Policy) and never remove or weaken it.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Responses include HSTS, nosniff, X-Frame-Options and Referrer-Policy."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C4",
+          "title": "HTTPS everywhere, no mixed content",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V9.1.1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-319"
+            ]
+          },
+          "ai_rule": "Load every resource and call every API over https://; never hardcode http:// URLs except localhost in development.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No http:// resource or API URLs other than localhost."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C5",
+          "title": "Minimize third-party scripts and pin them with Subresource Integrity",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.2.3"
+            ],
+            "owasp_top10": [
+              "A08"
+            ],
+            "cwe": [
+              "CWE-829",
+              "CWE-353"
+            ]
+          },
+          "ai_rule": "Prefer npm packages over CDN script tags; any external <script> must have integrity and crossorigin attributes unless the provider forbids SRI.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "External script tags carry integrity attributes."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C6",
+          "title": "Allow only safe, relative redirect targets",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.1.5"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-601"
+            ]
+          },
+          "ai_rule": "Never redirect to a URL taken directly from user input; accept only relative paths starting with a single \"/\" or an allow-listed destination.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No res.redirect() with request parameters."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C8",
+          "title": "Prevent caching of sensitive responses",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "WEB-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V8.2.1"
+            ],
+            "cwe": [
+              "CWE-525"
+            ]
+          },
+          "ai_rule": "Responses containing personal or sensitive data must send Cache-Control no-store.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Account pages respond with Cache-Control no-store."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "api",
+      "options": {
+        "style": [
+          "rest"
+        ],
+        "fetches_user_urls": false
+      },
+      "threats": [
+        {
+          "id": "API-T1",
+          "title": "Broken object-level authorization (accessing other users' records by ID)",
+          "stride": [
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-639"
+          ]
+        },
+        {
+          "id": "API-T2",
+          "title": "Broken function-level authorization (calling admin or other privileged endpoints)",
+          "stride": [
+            "E"
+          ],
+          "cwe": [
+            "CWE-285"
+          ]
+        },
+        {
+          "id": "API-T3",
+          "title": "Mass assignment and excessive data exposure",
+          "stride": [
+            "T",
+            "I"
+          ],
+          "cwe": [
+            "CWE-915",
+            "CWE-213"
+          ]
+        },
+        {
+          "id": "API-T4",
+          "title": "Unrestricted resource consumption",
+          "stride": [
+            "D"
+          ],
+          "cwe": [
+            "CWE-770"
+          ]
+        },
+        {
+          "id": "API-T5",
+          "title": "Injection through unvalidated input",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-20"
+          ]
+        },
+        {
+          "id": "API-T7",
+          "title": "Cross-origin data theft through permissive CORS",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-942"
+          ]
+        },
+        {
+          "id": "API-T9",
+          "title": "Internal details leaked through errors, debug modes or version headers",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-209",
+            "CWE-489"
+          ]
+        },
+        {
+          "id": "API-T10",
+          "title": "Forgotten, undocumented or old API versions left exposed",
+          "stride": [
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-1059"
+          ]
+        },
+        {
+          "id": "API-T11",
+          "title": "Credentials or tokens exposed in URLs",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-598"
+          ]
+        },
+        {
+          "id": "API-T12",
+          "title": "Abuse of over-privileged or leaked third-party API credentials",
+          "stride": [
+            "S",
+            "E"
+          ],
+          "cwe": [
+            "CWE-285"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "API-C1",
+          "title": "Check object-level authorization on every request that takes a resource ID",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V4.2.1",
+              "V13.1.4"
+            ],
+            "owasp_api_top10": [
+              "API1"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-639"
+            ]
+          },
+          "ai_rule": "Every handler that loads or changes a record by ID must check that the current user is allowed to access that specific record (scope the query by owner/tenant); being authenticated is not enough.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "User A requesting user B's resource by ID gets 403/404."
+            }
+          ]
+        },
+        {
+          "id": "API-C2",
+          "title": "Deny-by-default function-level authorization",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V4.1.3",
+              "V4.1.5"
+            ],
+            "owasp_api_top10": [
+              "API5"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-285"
+            ]
+          },
+          "ai_rule": "Apply authorization middleware to all routes by default and explicitly mark public ones; check roles/permissions on the server for every privileged action, never only in the UI.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A regular user calling an admin endpoint gets 403."
+            }
+          ]
+        },
+        {
+          "id": "API-C3",
+          "title": "Validate requests against a schema and return explicit response shapes",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T3",
+            "API-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.1.2",
+              "V5.1.3",
+              "V13.2.2"
+            ],
+            "owasp_api_top10": [
+              "API3"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-915",
+              "CWE-213",
+              "CWE-20"
+            ]
+          },
+          "ai_rule": "Validate every request with a schema that rejects unknown fields; never pass req.body directly to an ORM create/update; return explicit response objects, never whole database models.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No ORM create/update called with the raw request body."
+            },
+            {
+              "type": "test",
+              "description": "Sending role=admin in a profile update has no effect."
+            }
+          ]
+        },
+        {
+          "id": "API-C4",
+          "title": "Rate limits, pagination caps, payload limits and timeouts",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V11.1.4"
+            ],
+            "owasp_api_top10": [
+              "API4"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-770"
+            ]
+          },
+          "ai_rule": "List endpoints must enforce a maximum page size; apply rate limits, request body size limits and timeouts to all API routes.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "limit=100000 is clamped; exceeding the rate limit returns 429."
+            }
+          ]
+        },
+        {
+          "id": "API-C6",
+          "title": "Strict CORS allow-list",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.5.3"
+            ],
+            "owasp_api_top10": [
+              "API8"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-942"
+            ]
+          },
+          "ai_rule": "Configure CORS with an explicit list of allowed origins; never reflect the request Origin, never allow \"null\", and never use \"*\" with credentials.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A request from https://evil.example gets no Access-Control-Allow-Origin header."
+            }
+          ]
+        },
+        {
+          "id": "API-C11",
+          "title": "Scoped, revocable, per-client credentials for third parties",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T12"
+          ],
+          "standards": {
+            "owasp_api_top10": [
+              "API2",
+              "API5"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-285"
+            ]
+          },
+          "ai_rule": "Third-party API credentials must be per-client, scoped to minimum permissions, stored hashed, revocable and rate-limited per client.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Each third-party key has scopes and can be revoked without affecting others."
+            }
+          ]
+        },
+        {
+          "id": "API-C8",
+          "title": "Generic errors, no debug mode or version headers in production",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T9"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.4.1",
+              "V14.3.2",
+              "V14.3.3"
+            ],
+            "owasp_api_top10": [
+              "API8"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-209",
+              "CWE-489"
+            ]
+          },
+          "ai_rule": "API error responses must not include stack traces, SQL errors or internal paths; return a generic message with a request ID and log details server-side; disable X-Powered-By and debug modes.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A forced 500 error returns no stack trace."
+            }
+          ]
+        },
+        {
+          "id": "API-C9",
+          "title": "Keep an API inventory and retire old versions",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T10"
+          ],
+          "standards": {
+            "owasp_api_top10": [
+              "API9"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-1059"
+            ]
+          },
+          "ai_rule": "Document new endpoints in the API spec; do not add debug, test or temporary endpoints without removing them before merge.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Routes in production match the documented API inventory."
+            }
+          ]
+        },
+        {
+          "id": "API-C10",
+          "title": "Send credentials in headers, never in URLs",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T11"
+          ],
+          "standards": {
+            "asvs": [
+              "V13.1.3",
+              "V8.3.1"
+            ],
+            "owasp_api_top10": [
+              "API2"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-598"
+            ]
+          },
+          "ai_rule": "Accept API keys and tokens only from headers or cookies, never from query string parameters.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No req.query.token / api_key / access_token reads."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "database",
+      "options": {
+        "engine": "postgres",
+        "kind": "sql",
+        "stores_sensitive_data": true
+      },
+      "threats": [
+        {
+          "id": "DB-T1",
+          "title": "SQL injection",
+          "stride": [
+            "T",
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-89"
+          ]
+        },
+        {
+          "id": "DB-T3",
+          "title": "Excessive damage from a compromised application account",
+          "stride": [
+            "E"
+          ],
+          "cwe": [
+            "CWE-250"
+          ]
+        },
+        {
+          "id": "DB-T4",
+          "title": "Credentials leaked from source code or images",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-798"
+          ]
+        },
+        {
+          "id": "DB-T5",
+          "title": "Interception of database traffic",
+          "stride": [
+            "I",
+            "T"
+          ],
+          "cwe": [
+            "CWE-319"
+          ]
+        },
+        {
+          "id": "DB-T6",
+          "title": "Exposure of sensitive data from stolen disks, snapshots or backups",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-311"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "DB-C1",
+          "title": "Use parameterized queries or a safe query builder / ORM",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.3.4"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-89"
+            ]
+          },
+          "ai_rule": "Never build SQL with string concatenation or template literals; always use bound parameters, and pick dynamic identifiers (columns, sort order) from an allow-list.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No query()/execute()/raw() call receives a concatenated or interpolated string."
+            }
+          ]
+        },
+        {
+          "id": "DB-C4",
+          "title": "Load database credentials from a secret store, never from source",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.10.4"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-798"
+            ]
+          },
+          "ai_rule": "Never hardcode database credentials or connection strings; read them from environment variables or a secrets manager.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No connection string with an inline password in source files."
+            }
+          ]
+        },
+        {
+          "id": "DB-C3",
+          "title": "Least-privilege database accounts",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T3"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-250",
+              "CWE-272"
+            ]
+          },
+          "ai_rule": "The application connects with a least-privilege database user; migrations use a separate account; never connect as root/superuser/admin.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Application DB role has no DDL/superuser rights."
+            }
+          ]
+        },
+        {
+          "id": "DB-C5",
+          "title": "Encrypt database connections with verified TLS",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V9.2.2"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-319",
+              "CWE-295"
+            ]
+          },
+          "ai_rule": "Database connections must use TLS with certificate verification; never disable certificate checks (e.g. rejectUnauthorized: false, sslmode=require without verify).",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No rejectUnauthorized false in DB client config."
+            }
+          ]
+        },
+        {
+          "id": "DB-C6",
+          "title": "Encrypt sensitive data at rest and in backups",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T6"
+          ],
+          "standards": {
+            "asvs": [
+              "V6.1.1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-311"
+            ]
+          },
+          "ai_rule": "Sensitive fields (IDs, health, financial data) are encrypted at rest; keys come from a KMS, never from source code.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "Storage encryption is enabled on the DB instance and its backups."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "file_upload",
+      "options": {
+        "types": [
+          "documents",
+          "images"
+        ],
+        "served_to_other_users": true
+      },
+      "threats": [
+        {
+          "id": "UPLOAD-T1",
+          "title": "Upload of executable or malicious content",
+          "stride": [
+            "T",
+            "E"
+          ],
+          "cwe": [
+            "CWE-434"
+          ]
+        },
+        {
+          "id": "UPLOAD-T2",
+          "title": "Path traversal through the file name",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-22"
+          ]
+        },
+        {
+          "id": "UPLOAD-T3",
+          "title": "Resource exhaustion through huge files or decompression bombs",
+          "stride": [
+            "D"
+          ],
+          "cwe": [
+            "CWE-400",
+            "CWE-409"
+          ]
+        },
+        {
+          "id": "UPLOAD-T4",
+          "title": "Stored XSS by serving uploads as HTML/SVG from the app origin",
+          "stride": [
+            "T",
+            "E"
+          ],
+          "cwe": [
+            "CWE-79"
+          ]
+        },
+        {
+          "id": "UPLOAD-T5",
+          "title": "Malware distribution to other users",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-434"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "UPLOAD-C1",
+          "title": "Validate type by file content against an allow-list",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.2.1"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-434"
+            ]
+          },
+          "ai_rule": "Validate uploads by file content (magic bytes) against an allow-list of types; never trust the extension or client Content-Type; re-encode images server-side.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A PHP/HTML file renamed to .jpg is rejected."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C2",
+          "title": "Generate server-side file names; never use the client file name in paths",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.3.1"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-22"
+            ]
+          },
+          "ai_rule": "Store uploads under a server-generated random name; never build a filesystem path or object key from the user-supplied file name.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No path.join / open() using the uploaded file's original name."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C4",
+          "title": "Store uploads outside the web root with no execute permission",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.4.1"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-434",
+              "CWE-552"
+            ]
+          },
+          "ai_rule": "Store uploads in private object storage or a non-executable directory outside the web root; serve them via short-lived signed URLs or a controlled download handler.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Upload location is not reachable as a static path and buckets are private."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C5",
+          "title": "Serve user files safely (separate origin, attachment, nosniff)",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "UPLOAD-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.5.2"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-79"
+            ]
+          },
+          "ai_rule": "Serve user uploads from a separate domain with Content-Disposition: attachment (except safe images), explicit Content-Type and X-Content-Type-Options: nosniff; never inline user SVG/HTML on the app origin.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Download responses include nosniff and attachment headers."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C3",
+          "title": "Enforce size limits and guard against decompression bombs",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.1.1",
+              "V12.1.2"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-400",
+              "CWE-409"
+            ]
+          },
+          "ai_rule": "Enforce a maximum upload size at the server, and cap decompressed size, entry count and image dimensions before processing any archive or image.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "Body-size limit is configured on the upload route."
+            },
+            {
+              "type": "test",
+              "description": "An upload above the limit returns 413."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C6",
+          "title": "Scan uploaded files for malware",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.4.2"
+            ],
+            "cwe": [
+              "CWE-434"
+            ]
+          },
+          "ai_rule": "Quarantine uploads and make them available to other users only after a malware scan passes.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "The upload pipeline has a scan step before files are published."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "payments",
+      "options": {
+        "provider": "razorpay",
+        "integration": "hosted_checkout",
+        "webhooks": true
+      },
+      "threats": [
+        {
+          "id": "PAY-T2",
+          "title": "Forged payment webhooks mark unpaid orders as paid",
+          "stride": [
+            "S",
+            "T"
+          ],
+          "cwe": [
+            "CWE-345"
+          ]
+        },
+        {
+          "id": "PAY-T3",
+          "title": "Price or amount tampering by the client",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-602",
+            "CWE-472"
+          ]
+        },
+        {
+          "id": "PAY-T4",
+          "title": "Double fulfilment from retries, replays or race conditions",
+          "stride": [
+            "T",
+            "R"
+          ],
+          "cwe": [
+            "CWE-362"
+          ]
+        },
+        {
+          "id": "PAY-T6",
+          "title": "Card testing (carding) through the checkout",
+          "stride": [
+            "S",
+            "D"
+          ],
+          "cwe": [
+            "CWE-799"
+          ]
+        },
+        {
+          "id": "PAY-T8",
+          "title": "Card data leaked through logs, analytics or databases",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-532"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "PAY-C3",
+          "title": "Verify webhook signatures and process each event once",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T2",
+            "PAY-T4"
+          ],
+          "standards": {
+            "owasp_api_top10": [
+              "API10"
+            ],
+            "owasp_top10": [
+              "A08"
+            ],
+            "cwe": [
+              "CWE-345",
+              "CWE-347"
+            ]
+          },
+          "ai_rule": "Payment webhooks must verify the provider signature on the raw request body with the webhook secret, reject stale timestamps, and ignore event IDs that were already processed.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A webhook with an invalid signature returns 400 and changes nothing."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C4",
+          "title": "Compute amounts on the server and verify them before fulfilment",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T3"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-602",
+              "CWE-472"
+            ]
+          },
+          "ai_rule": "Never accept prices, totals or currency from the client; compute amounts on the server from the catalog and verify the paid amount and currency before fulfilling an order.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Changing the price in the checkout request does not change the charged amount."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C2",
+          "title": "Never log or store card data; keep only provider tokens and the last 4 digits",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T8"
+          ],
+          "standards": {
+            "pci_dss": [
+              "3.3.1",
+              "3.4.1"
+            ],
+            "asvs": [
+              "V7.1.1"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-532"
+            ]
+          },
+          "ai_rule": "Never log, persist or send to analytics any card number, CVV or full payment payload; store only provider IDs plus brand and last 4 digits.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Logs and analytics events from a test checkout contain no card data."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C5",
+          "title": "Idempotent payment and fulfilment operations",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T4"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-362"
+            ]
+          },
+          "ai_rule": "Create charges with idempotency keys and make order fulfilment idempotent (unique constraint or transaction on the payment ID) so it can never run twice.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Delivering the same payment-succeeded event twice concurrently fulfils once."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C7",
+          "title": "Throttle and screen payment attempts against card testing",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T6"
+          ],
+          "standards": {
+            "owasp_api_top10": [
+              "API6"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-799"
+            ]
+          },
+          "ai_rule": "Rate-limit payment and card-setup attempts per user, IP and card fingerprint, and keep the provider's fraud screening enabled.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Repeated declined attempts trigger throttling."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

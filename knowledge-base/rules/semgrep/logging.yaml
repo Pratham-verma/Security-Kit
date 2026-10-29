@@ -1,0 +1,83 @@
+rules:
+  - id: seckit.log-c2.sensitive-data-logged
+    message: "Request bodies, headers, environment variables or passwords written to logs. Log selected fields and use redact()."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [LOG-C2, SEC-C6]
+      cwe: CWE-532
+    patterns:
+      - pattern-either:
+          - pattern: $LOG.$M(..., req.body, ...)
+          - pattern: $LOG.$M(..., req.headers, ...)
+          - pattern: $LOG.$M(..., req.headers.authorization, ...)
+          - pattern: $LOG.$M(..., req.cookies, ...)
+          - pattern: $LOG.$M(..., process.env, ...)
+          - pattern: $LOG.$M(..., $X.password, ...)
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: ^(console|logger|log|this\.logger|fastify\.log|req\.log)$
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(log|info|debug|warn|error|trace|fatal)$
+
+  - id: seckit.log-c3.request-data-in-log-message
+    message: "Request data concatenated into a log message (log injection). Pass it as a structured field instead."
+    severity: INFO
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [LOG-C3]
+      cwe: CWE-117
+    patterns:
+      - pattern-either:
+          - pattern: $LOG.$M(`...${req.$S.$P}...`, ...)
+          - pattern: $LOG.$M("..." + req.$S.$P, ...)
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: ^(logger|log|this\.logger|fastify\.log|req\.log)$
+
+  - id: seckit.log-c2.python-sensitive-data-logged
+    message: "Request bodies, headers, environment variables or passwords written to logs. Log selected fields only."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      seckit-controls: [LOG-C2, SEC-C6]
+      cwe: CWE-532
+    patterns:
+      - pattern-either:
+          - pattern: $LOG.$M(..., request.$A, ...)
+          - pattern: $LOG.$M(f"...{request.$A}...", ...)
+          - pattern: $LOG.$M(..., os.environ, ...)
+          - pattern: $LOG.$M(..., $X.password, ...)
+          - pattern: $LOG.$M(f"...{$X.password}...", ...)
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: ^(logger|logging|log|self\.logger|app\.logger|current_app\.logger)$
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(debug|info|warning|warn|error|exception|critical)$
+
+  - id: seckit.log-c2.java-sensitive-data-logged
+    message: "Password, token, secret or Authorization header written to logs. Log an identifier instead, or mask the value."
+    severity: WARNING
+    languages: [java, kotlin]
+    metadata:
+      seckit-controls: [LOG-C2, SEC-C6]
+      cwe: CWE-532
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: $LOG.$M(..., $A, ...)
+                  - pattern: $LOG.$M("..." + $A, ...)
+              - metavariable-regex:
+                  metavariable: $A
+                  regex: (?i)^[\w.]*(password|passwd|secret|token|apikey|api_key|credential)\w*(\(\))?$
+          - pattern: $LOG.$M(..., $REQ.getHeader("Authorization"), ...)
+          - pattern: $LOG.$M(..., $REQ.getHeader(HttpHeaders.AUTHORIZATION), ...)
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: ^(log|logger|LOG|LOGGER|_log|_logger)$
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(trace|debug|info|warn|error|atInfo|atDebug)$

@@ -1,0 +1,16 @@
+{
+  // The browser app. Type-checked here; bundled by scripts/build-app.mjs (esbuild).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "@seckit/core/engine": ["../core/src/engine.ts"],
+      "@seckit/core/browser": ["../core/src/browser.ts"]
+    }
+  },
+  "include": ["src/app", "src/shared"]
+}

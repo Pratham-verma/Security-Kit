@@ -1,0 +1,35 @@
+rules:
+  - id: seckit.awseuc-c3.tf-appstream-default-internet
+    message: "AppStream fleet uses default internet access. Route internet traffic through your VPC (NAT and filtering) instead."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSEUC-C3]
+      cwe: CWE-200
+    pattern: |
+      resource "aws_appstream_fleet" $N {
+        ...
+        enable_default_internet_access = true
+        ...
+      }
+
+  - id: seckit.awseuc-c2.tf-workspace-unencrypted
+    message: "WorkSpace volumes are not encrypted. Set root_volume_encryption_enabled and user_volume_encryption_enabled with a KMS key."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSEUC-C2]
+      cwe: CWE-311
+    patterns:
+      - pattern: |
+          resource "aws_workspaces_workspace" $N {
+            ...
+          }
+      - pattern-not: |
+          resource "aws_workspaces_workspace" $N {
+            ...
+            root_volume_encryption_enabled = true
+            ...
+            user_volume_encryption_enabled = true
+            ...
+          }

@@ -1,0 +1,3598 @@
+{
+  "generator": "seckit 0.0.1",
+  "app": {
+    "name": "shop-app",
+    "platforms": [
+      "web",
+      "backend",
+      "android",
+      "ios"
+    ],
+    "data_sensitivity": "high",
+    "assurance_level": 2
+  },
+  "components": [
+    {
+      "type": "auth",
+      "options": {
+        "methods": [
+          "email_password",
+          "oauth",
+          "otp_sms"
+        ],
+        "mfa": "optional"
+      },
+      "threats": [
+        {
+          "id": "AUTH-T1",
+          "title": "Credential stuffing and brute-force attacks",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-307"
+          ]
+        },
+        {
+          "id": "AUTH-T2",
+          "title": "Offline cracking of stolen password hashes",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-916"
+          ]
+        },
+        {
+          "id": "AUTH-T3",
+          "title": "Weak or previously breached passwords",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-521"
+          ]
+        },
+        {
+          "id": "AUTH-T4",
+          "title": "Account enumeration",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-204"
+          ]
+        },
+        {
+          "id": "AUTH-T5",
+          "title": "Session fixation after login",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-384"
+          ]
+        },
+        {
+          "id": "AUTH-T6",
+          "title": "OAuth login CSRF and authorization-code interception",
+          "stride": [
+            "S",
+            "T"
+          ],
+          "cwe": [
+            "CWE-352"
+          ]
+        },
+        {
+          "id": "AUTH-T7",
+          "title": "One-time code guessing and SIM-swap interception",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-307",
+            "CWE-287"
+          ]
+        },
+        {
+          "id": "AUTH-T8",
+          "title": "Account takeover with a single compromised factor",
+          "stride": [
+            "S",
+            "E"
+          ],
+          "cwe": [
+            "CWE-308"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "AUTH-C2",
+          "title": "Hash passwords with Argon2id (or bcrypt/scrypt as fallback)",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.4.1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-916",
+              "CWE-759"
+            ],
+            "nist": [
+              "SP 800-63B 5.1.1.2"
+            ]
+          },
+          "ai_rule": "Hash passwords only with Argon2id from a maintained library (bcrypt or scrypt if unavailable); never use MD5/SHA-* for passwords and never store or log a plaintext password.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No md5/sha1/sha256 calls applied to password variables."
+            },
+            {
+              "type": "test",
+              "description": "Stored password values begin with the $argon2id$ prefix."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C1",
+          "title": "Rate-limit and throttle authentication attempts",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T1",
+            "AUTH-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.2.1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-307"
+            ]
+          },
+          "ai_rule": "Every login, OTP-verification and password-reset endpoint must be rate-limited per account and per IP; never write an authentication endpoint without throttling.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "N+1 rapid failed logins for one account are rejected or delayed."
+            },
+            {
+              "type": "semgrep",
+              "description": "Auth route handlers are registered behind a rate-limit middleware."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C3",
+          "title": "Enforce minimum length and block breached passwords",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.1.1",
+              "V2.1.7"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-521"
+            ],
+            "nist": [
+              "SP 800-63B 5.1.1.2"
+            ]
+          },
+          "ai_rule": "Password policy: minimum 12 characters, maximum at least 64, no composition rules, and reject passwords found in breach lists; validate on the server, not only the client.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "An 11-character password and a known-breached password are both rejected."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C5",
+          "title": "Issue a new session identifier on login",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.2.1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-384"
+            ]
+          },
+          "ai_rule": "On successful login or privilege change, regenerate the session ID / issue new tokens and invalidate the previous session.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Session cookie value changes after a successful login."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C6",
+          "title": "Use Authorization Code flow with PKCE and validate state/nonce",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AUTH-T6"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-352"
+            ]
+          },
+          "ai_rule": "OAuth/OIDC: use Authorization Code + PKCE (S256), verify state and nonce, validate ID-token signature/iss/aud/exp, never use the implicit flow or an embedded WebView.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No response_type=token (implicit flow) in OAuth requests."
+            },
+            {
+              "type": "manual",
+              "description": "Callback rejects a request with a missing or mismatched state."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C7",
+          "title": "Short-lived, single-use, rate-limited one-time codes",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.7.2",
+              "V2.7.3"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-307"
+            ]
+          },
+          "ai_rule": "One-time codes: generate with a CSPRNG, expire in 10 minutes or less, single use, invalidate after 5 failed attempts, compare in constant time.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A used or expired code is rejected; the 6th wrong attempt invalidates the code."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C8",
+          "title": "Offer multi-factor authentication (require it at higher assurance)",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AUTH-T8"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-308"
+            ],
+            "masvs": [
+              "MASVS-AUTH-2"
+            ],
+            "nist": [
+              "SP 800-63B AAL2"
+            ]
+          },
+          "ai_rule": "Design authentication so a second factor (passkey/WebAuthn or TOTP) can be enforced; admin accounts must always require MFA.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "MFA enrollment exists and is enforced for admin roles."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C4",
+          "title": "Return identical responses for unknown and existing accounts",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AUTH-T4"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-204"
+            ]
+          },
+          "ai_rule": "Login, signup and password-reset responses must not reveal whether an account exists: same message, same status code, comparable timing.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Reset request for unknown vs. known email returns identical status and body."
+            }
+          ]
+        },
+        {
+          "id": "AUTH-C9",
+          "title": "No security questions or password hints",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AUTH-T1",
+            "AUTH-T8"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.5.2"
+            ],
+            "cwe": [
+              "CWE-640"
+            ]
+          },
+          "ai_rule": "Never implement security questions or password hints for account recovery.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Recovery flow uses a time-limited token sent to a verified channel only."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "session",
+      "options": {
+        "kind": "jwt",
+        "transport": "authorization_header"
+      },
+      "threats": [
+        {
+          "id": "SESS-T1",
+          "title": "Token theft through XSS when tokens are readable by JavaScript",
+          "stride": [
+            "S",
+            "I"
+          ],
+          "cwe": [
+            "CWE-922"
+          ]
+        },
+        {
+          "id": "SESS-T2",
+          "title": "Token leakage over the network, in URLs or through insecure cookies",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-614",
+            "CWE-598"
+          ]
+        },
+        {
+          "id": "SESS-T4",
+          "title": "Sessions that never expire or cannot be revoked",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-613"
+          ]
+        },
+        {
+          "id": "SESS-T5",
+          "title": "Forged or tampered JWTs (alg=none, algorithm confusion, weak signing keys)",
+          "stride": [
+            "S",
+            "T"
+          ],
+          "cwe": [
+            "CWE-347"
+          ]
+        },
+        {
+          "id": "SESS-T7",
+          "title": "A hijacked session is used to take over the account (change email or password)",
+          "stride": [
+            "S",
+            "E"
+          ],
+          "cwe": [
+            "CWE-620"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "SESS-C5",
+          "title": "Strict JWT verification and short-lived tokens with rotating refresh tokens",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "SESS-T5",
+            "SESS-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.5.3"
+            ],
+            "owasp_top10": [
+              "A02",
+              "A07"
+            ],
+            "cwe": [
+              "CWE-347",
+              "CWE-345"
+            ]
+          },
+          "ai_rule": "Verify JWTs with an explicit algorithm allow-list and check exp, iss and aud; never decode without verifying; keep access tokens short-lived and rotate refresh tokens with reuse detection.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No jwt.decode used for authorization, no verify without algorithms option."
+            },
+            {
+              "type": "test",
+              "description": "Tokens with alg=none, a wrong audience or expired exp are rejected."
+            }
+          ]
+        },
+        {
+          "id": "SESS-C3",
+          "title": "Keep browser tokens out of localStorage",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "web"
+          ],
+          "mitigates": [
+            "SESS-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.2.3",
+              "V8.2.2"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-922"
+            ]
+          },
+          "ai_rule": "Never store access or refresh tokens in localStorage or sessionStorage; keep them in memory or use HttpOnly cookies via a backend-for-frontend.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No localStorage/sessionStorage.setItem with token-like keys."
+            }
+          ]
+        },
+        {
+          "id": "SESS-C4",
+          "title": "Idle and absolute timeouts; server-side logout and revocation",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "SESS-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.3.1",
+              "V3.3.2",
+              "V3.3.3"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-613"
+            ]
+          },
+          "ai_rule": "Sessions need an idle timeout and an absolute lifetime; logout and password changes must invalidate sessions or refresh tokens server-side, not just delete them on the client.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A session token used after logout is rejected."
+            }
+          ]
+        },
+        {
+          "id": "SESS-C7",
+          "title": "Never put session tokens in URLs",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "SESS-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.1.1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-598"
+            ]
+          },
+          "ai_rule": "Never put session tokens, access tokens or API keys in URL paths or query strings.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No token/session/api_key query parameters built into URLs."
+            }
+          ]
+        },
+        {
+          "id": "SESS-C8",
+          "title": "Re-authenticate before sensitive account changes",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "SESS-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.7.1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-620"
+            ]
+          },
+          "ai_rule": "Changing email, password, MFA settings or payout details must require re-authentication (current password or fresh MFA), even within a valid session.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Password change without the current password is rejected."
+            }
+          ]
+        },
+        {
+          "id": "SESS-C9",
+          "title": "Let users see and end their active sessions",
+          "severity": "low",
+          "level": 2,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "SESS-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V3.3.4"
+            ],
+            "cwe": [
+              "CWE-613"
+            ]
+          },
+          "ai_rule": "Provide a way for users to list their active sessions and revoke any of them.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "The account settings page lists sessions and revoking one invalidates it."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "web_frontend",
+      "options": {
+        "rendering": "spa",
+        "third_party_scripts": true,
+        "user_html": false
+      },
+      "threats": [
+        {
+          "id": "WEB-T1",
+          "title": "Cross-site scripting (XSS)",
+          "stride": [
+            "T",
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-79"
+          ]
+        },
+        {
+          "id": "WEB-T2",
+          "title": "Clickjacking",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-1021"
+          ]
+        },
+        {
+          "id": "WEB-T3",
+          "title": "Traffic downgraded to HTTP or intercepted (SSL stripping, mixed content)",
+          "stride": [
+            "I",
+            "T"
+          ],
+          "cwe": [
+            "CWE-319"
+          ]
+        },
+        {
+          "id": "WEB-T4",
+          "title": "A compromised third-party script runs with full page access",
+          "stride": [
+            "T",
+            "I"
+          ],
+          "cwe": [
+            "CWE-829"
+          ]
+        },
+        {
+          "id": "WEB-T5",
+          "title": "Open redirects used for phishing or token theft",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-601"
+          ]
+        },
+        {
+          "id": "WEB-T7",
+          "title": "Sensitive pages cached by browsers or shared proxies",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-525"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "WEB-C1",
+          "title": "Encode output by context and avoid dangerous DOM sinks",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.3.1",
+              "V5.3.3",
+              "V5.2.4"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-79",
+              "CWE-95"
+            ]
+          },
+          "ai_rule": "Never use innerHTML, outerHTML, insertAdjacentHTML, document.write, dangerouslySetInnerHTML, v-html, eval or new Function with dynamic data; rely on framework escaping, and sanitize with DOMPurify when HTML is unavoidable.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No dynamic data flows into HTML sinks or eval."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C2",
+          "title": "Strict Content Security Policy",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T1",
+            "WEB-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.4.3"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-79",
+              "CWE-1021"
+            ]
+          },
+          "ai_rule": "Do not add inline scripts or event-handler attributes; scripts load from our origin or carry the CSP nonce; never add unsafe-inline or unsafe-eval to script-src.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "HTML responses carry a CSP without unsafe-inline/unsafe-eval in script-src."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C3",
+          "title": "Security headers (HSTS, nosniff, frame-ancestors, Referrer-Policy)",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "WEB-T2",
+            "WEB-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.4.4",
+              "V14.4.5",
+              "V14.4.6",
+              "V14.4.7"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-1021",
+              "CWE-319",
+              "CWE-693"
+            ]
+          },
+          "ai_rule": "Keep the security-headers middleware on every response (HSTS, nosniff, frame-ancestors, Referrer-Policy) and never remove or weaken it.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Responses include HSTS, nosniff, X-Frame-Options and Referrer-Policy."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C4",
+          "title": "HTTPS everywhere, no mixed content",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V9.1.1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-319"
+            ]
+          },
+          "ai_rule": "Load every resource and call every API over https://; never hardcode http:// URLs except localhost in development.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No http:// resource or API URLs other than localhost."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C5",
+          "title": "Minimize third-party scripts and pin them with Subresource Integrity",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.2.3"
+            ],
+            "owasp_top10": [
+              "A08"
+            ],
+            "cwe": [
+              "CWE-829",
+              "CWE-353"
+            ]
+          },
+          "ai_rule": "Prefer npm packages over CDN script tags; any external <script> must have integrity and crossorigin attributes unless the provider forbids SRI.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "External script tags carry integrity attributes."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C6",
+          "title": "Allow only safe, relative redirect targets",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "WEB-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.1.5"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-601"
+            ]
+          },
+          "ai_rule": "Never redirect to a URL taken directly from user input; accept only relative paths starting with a single \"/\" or an allow-listed destination.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No res.redirect() with request parameters."
+            }
+          ]
+        },
+        {
+          "id": "WEB-C8",
+          "title": "Prevent caching of sensitive responses",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "WEB-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V8.2.1"
+            ],
+            "cwe": [
+              "CWE-525"
+            ]
+          },
+          "ai_rule": "Responses containing personal or sensitive data must send Cache-Control no-store.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Account pages respond with Cache-Control no-store."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "api",
+      "options": {
+        "style": [
+          "rest"
+        ],
+        "consumers": [
+          "own_frontend",
+          "own_mobile_app"
+        ],
+        "fetches_user_urls": false
+      },
+      "threats": [
+        {
+          "id": "API-T1",
+          "title": "Broken object-level authorization (accessing other users' records by ID)",
+          "stride": [
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-639"
+          ]
+        },
+        {
+          "id": "API-T2",
+          "title": "Broken function-level authorization (calling admin or other privileged endpoints)",
+          "stride": [
+            "E"
+          ],
+          "cwe": [
+            "CWE-285"
+          ]
+        },
+        {
+          "id": "API-T3",
+          "title": "Mass assignment and excessive data exposure",
+          "stride": [
+            "T",
+            "I"
+          ],
+          "cwe": [
+            "CWE-915",
+            "CWE-213"
+          ]
+        },
+        {
+          "id": "API-T4",
+          "title": "Unrestricted resource consumption",
+          "stride": [
+            "D"
+          ],
+          "cwe": [
+            "CWE-770"
+          ]
+        },
+        {
+          "id": "API-T5",
+          "title": "Injection through unvalidated input",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-20"
+          ]
+        },
+        {
+          "id": "API-T7",
+          "title": "Cross-origin data theft through permissive CORS",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-942"
+          ]
+        },
+        {
+          "id": "API-T9",
+          "title": "Internal details leaked through errors, debug modes or version headers",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-209",
+            "CWE-489"
+          ]
+        },
+        {
+          "id": "API-T10",
+          "title": "Forgotten, undocumented or old API versions left exposed",
+          "stride": [
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-1059"
+          ]
+        },
+        {
+          "id": "API-T11",
+          "title": "Credentials or tokens exposed in URLs",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-598"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "API-C1",
+          "title": "Check object-level authorization on every request that takes a resource ID",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V4.2.1",
+              "V13.1.4"
+            ],
+            "owasp_api_top10": [
+              "API1"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-639"
+            ]
+          },
+          "ai_rule": "Every handler that loads or changes a record by ID must check that the current user is allowed to access that specific record (scope the query by owner/tenant); being authenticated is not enough.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "User A requesting user B's resource by ID gets 403/404."
+            }
+          ]
+        },
+        {
+          "id": "API-C2",
+          "title": "Deny-by-default function-level authorization",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V4.1.3",
+              "V4.1.5"
+            ],
+            "owasp_api_top10": [
+              "API5"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-285"
+            ]
+          },
+          "ai_rule": "Apply authorization middleware to all routes by default and explicitly mark public ones; check roles/permissions on the server for every privileged action, never only in the UI.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A regular user calling an admin endpoint gets 403."
+            }
+          ]
+        },
+        {
+          "id": "API-C3",
+          "title": "Validate requests against a schema and return explicit response shapes",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T3",
+            "API-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.1.2",
+              "V5.1.3",
+              "V13.2.2"
+            ],
+            "owasp_api_top10": [
+              "API3"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-915",
+              "CWE-213",
+              "CWE-20"
+            ]
+          },
+          "ai_rule": "Validate every request with a schema that rejects unknown fields; never pass req.body directly to an ORM create/update; return explicit response objects, never whole database models.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No ORM create/update called with the raw request body."
+            },
+            {
+              "type": "test",
+              "description": "Sending role=admin in a profile update has no effect."
+            }
+          ]
+        },
+        {
+          "id": "API-C4",
+          "title": "Rate limits, pagination caps, payload limits and timeouts",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V11.1.4"
+            ],
+            "owasp_api_top10": [
+              "API4"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-770"
+            ]
+          },
+          "ai_rule": "List endpoints must enforce a maximum page size; apply rate limits, request body size limits and timeouts to all API routes.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "limit=100000 is clamped; exceeding the rate limit returns 429."
+            }
+          ]
+        },
+        {
+          "id": "API-C6",
+          "title": "Strict CORS allow-list",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T7"
+          ],
+          "standards": {
+            "asvs": [
+              "V14.5.3"
+            ],
+            "owasp_api_top10": [
+              "API8"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-942"
+            ]
+          },
+          "ai_rule": "Configure CORS with an explicit list of allowed origins; never reflect the request Origin, never allow \"null\", and never use \"*\" with credentials.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A request from https://evil.example gets no Access-Control-Allow-Origin header."
+            }
+          ]
+        },
+        {
+          "id": "API-C8",
+          "title": "Generic errors, no debug mode or version headers in production",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T9"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.4.1",
+              "V14.3.2",
+              "V14.3.3"
+            ],
+            "owasp_api_top10": [
+              "API8"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-209",
+              "CWE-489"
+            ]
+          },
+          "ai_rule": "API error responses must not include stack traces, SQL errors or internal paths; return a generic message with a request ID and log details server-side; disable X-Powered-By and debug modes.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A forced 500 error returns no stack trace."
+            }
+          ]
+        },
+        {
+          "id": "API-C9",
+          "title": "Keep an API inventory and retire old versions",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T10"
+          ],
+          "standards": {
+            "owasp_api_top10": [
+              "API9"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-1059"
+            ]
+          },
+          "ai_rule": "Document new endpoints in the API spec; do not add debug, test or temporary endpoints without removing them before merge.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Routes in production match the documented API inventory."
+            }
+          ]
+        },
+        {
+          "id": "API-C10",
+          "title": "Send credentials in headers, never in URLs",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "API-T11"
+          ],
+          "standards": {
+            "asvs": [
+              "V13.1.3",
+              "V8.3.1"
+            ],
+            "owasp_api_top10": [
+              "API2"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-598"
+            ]
+          },
+          "ai_rule": "Accept API keys and tokens only from headers or cookies, never from query string parameters.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No req.query.token / api_key / access_token reads."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "database",
+      "options": {
+        "engine": "postgres",
+        "kind": "sql",
+        "stores_sensitive_data": true
+      },
+      "threats": [
+        {
+          "id": "DB-T1",
+          "title": "SQL injection",
+          "stride": [
+            "T",
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-89"
+          ]
+        },
+        {
+          "id": "DB-T3",
+          "title": "Excessive damage from a compromised application account",
+          "stride": [
+            "E"
+          ],
+          "cwe": [
+            "CWE-250"
+          ]
+        },
+        {
+          "id": "DB-T4",
+          "title": "Credentials leaked from source code or images",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-798"
+          ]
+        },
+        {
+          "id": "DB-T5",
+          "title": "Interception of database traffic",
+          "stride": [
+            "I",
+            "T"
+          ],
+          "cwe": [
+            "CWE-319"
+          ]
+        },
+        {
+          "id": "DB-T6",
+          "title": "Exposure of sensitive data from stolen disks, snapshots or backups",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-311"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "DB-C1",
+          "title": "Use parameterized queries or a safe query builder / ORM",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V5.3.4"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-89"
+            ]
+          },
+          "ai_rule": "Never build SQL with string concatenation or template literals; always use bound parameters, and pick dynamic identifiers (columns, sort order) from an allow-list.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No query()/execute()/raw() call receives a concatenated or interpolated string."
+            }
+          ]
+        },
+        {
+          "id": "DB-C4",
+          "title": "Load database credentials from a secret store, never from source",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.10.4"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-798"
+            ]
+          },
+          "ai_rule": "Never hardcode database credentials or connection strings; read them from environment variables or a secrets manager.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No connection string with an inline password in source files."
+            }
+          ]
+        },
+        {
+          "id": "DB-C3",
+          "title": "Least-privilege database accounts",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T3"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-250",
+              "CWE-272"
+            ]
+          },
+          "ai_rule": "The application connects with a least-privilege database user; migrations use a separate account; never connect as root/superuser/admin.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Application DB role has no DDL/superuser rights."
+            }
+          ]
+        },
+        {
+          "id": "DB-C5",
+          "title": "Encrypt database connections with verified TLS",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V9.2.2"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-319",
+              "CWE-295"
+            ]
+          },
+          "ai_rule": "Database connections must use TLS with certificate verification; never disable certificate checks (e.g. rejectUnauthorized: false, sslmode=require without verify).",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No rejectUnauthorized false in DB client config."
+            }
+          ]
+        },
+        {
+          "id": "DB-C6",
+          "title": "Encrypt sensitive data at rest and in backups",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "DB-T6"
+          ],
+          "standards": {
+            "asvs": [
+              "V6.1.1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-311"
+            ]
+          },
+          "ai_rule": "Sensitive fields (IDs, health, financial data) are encrypted at rest; keys come from a KMS, never from source code.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "Storage encryption is enabled on the DB instance and its backups."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "file_upload",
+      "options": {
+        "types": [
+          "images"
+        ],
+        "storage": "object_storage",
+        "served_to_other_users": true
+      },
+      "threats": [
+        {
+          "id": "UPLOAD-T1",
+          "title": "Upload of executable or malicious content",
+          "stride": [
+            "T",
+            "E"
+          ],
+          "cwe": [
+            "CWE-434"
+          ]
+        },
+        {
+          "id": "UPLOAD-T2",
+          "title": "Path traversal through the file name",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-22"
+          ]
+        },
+        {
+          "id": "UPLOAD-T3",
+          "title": "Resource exhaustion through huge files or decompression bombs",
+          "stride": [
+            "D"
+          ],
+          "cwe": [
+            "CWE-400",
+            "CWE-409"
+          ]
+        },
+        {
+          "id": "UPLOAD-T4",
+          "title": "Stored XSS by serving uploads as HTML/SVG from the app origin",
+          "stride": [
+            "T",
+            "E"
+          ],
+          "cwe": [
+            "CWE-79"
+          ]
+        },
+        {
+          "id": "UPLOAD-T5",
+          "title": "Malware distribution to other users",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-434"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "UPLOAD-C1",
+          "title": "Validate type by file content against an allow-list",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.2.1"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-434"
+            ]
+          },
+          "ai_rule": "Validate uploads by file content (magic bytes) against an allow-list of types; never trust the extension or client Content-Type; re-encode images server-side.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A PHP/HTML file renamed to .jpg is rejected."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C2",
+          "title": "Generate server-side file names; never use the client file name in paths",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.3.1"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-22"
+            ]
+          },
+          "ai_rule": "Store uploads under a server-generated random name; never build a filesystem path or object key from the user-supplied file name.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No path.join / open() using the uploaded file's original name."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C4",
+          "title": "Store uploads outside the web root with no execute permission",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.4.1"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-434",
+              "CWE-552"
+            ]
+          },
+          "ai_rule": "Store uploads in private object storage or a non-executable directory outside the web root; serve them via short-lived signed URLs or a controlled download handler.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Upload location is not reachable as a static path and buckets are private."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C5",
+          "title": "Serve user files safely (separate origin, attachment, nosniff)",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend",
+            "web"
+          ],
+          "mitigates": [
+            "UPLOAD-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.5.2"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-79"
+            ]
+          },
+          "ai_rule": "Serve user uploads from a separate domain with Content-Disposition: attachment (except safe images), explicit Content-Type and X-Content-Type-Options: nosniff; never inline user SVG/HTML on the app origin.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Download responses include nosniff and attachment headers."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C3",
+          "title": "Enforce size limits and guard against decompression bombs",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.1.1",
+              "V12.1.2"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-400",
+              "CWE-409"
+            ]
+          },
+          "ai_rule": "Enforce a maximum upload size at the server, and cap decompressed size, entry count and image dimensions before processing any archive or image.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "Body-size limit is configured on the upload route."
+            },
+            {
+              "type": "test",
+              "description": "An upload above the limit returns 413."
+            }
+          ]
+        },
+        {
+          "id": "UPLOAD-C6",
+          "title": "Scan uploaded files for malware",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "UPLOAD-T5"
+          ],
+          "standards": {
+            "asvs": [
+              "V12.4.2"
+            ],
+            "cwe": [
+              "CWE-434"
+            ]
+          },
+          "ai_rule": "Quarantine uploads and make them available to other users only after a malware scan passes.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "The upload pipeline has a scan step before files are published."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "payments",
+      "options": {
+        "provider": "stripe",
+        "integration": "embedded_fields",
+        "webhooks": true
+      },
+      "threats": [
+        {
+          "id": "PAY-T2",
+          "title": "Forged payment webhooks mark unpaid orders as paid",
+          "stride": [
+            "S",
+            "T"
+          ],
+          "cwe": [
+            "CWE-345"
+          ]
+        },
+        {
+          "id": "PAY-T3",
+          "title": "Price or amount tampering by the client",
+          "stride": [
+            "T"
+          ],
+          "cwe": [
+            "CWE-602",
+            "CWE-472"
+          ]
+        },
+        {
+          "id": "PAY-T4",
+          "title": "Double fulfilment from retries, replays or race conditions",
+          "stride": [
+            "T",
+            "R"
+          ],
+          "cwe": [
+            "CWE-362"
+          ]
+        },
+        {
+          "id": "PAY-T5",
+          "title": "Payment-page script tampering (Magecart-style skimming)",
+          "stride": [
+            "T",
+            "I"
+          ],
+          "cwe": [
+            "CWE-829"
+          ]
+        },
+        {
+          "id": "PAY-T6",
+          "title": "Card testing (carding) through the checkout",
+          "stride": [
+            "S",
+            "D"
+          ],
+          "cwe": [
+            "CWE-799"
+          ]
+        },
+        {
+          "id": "PAY-T8",
+          "title": "Card data leaked through logs, analytics or databases",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-532"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "PAY-C3",
+          "title": "Verify webhook signatures and process each event once",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T2",
+            "PAY-T4"
+          ],
+          "standards": {
+            "owasp_api_top10": [
+              "API10"
+            ],
+            "owasp_top10": [
+              "A08"
+            ],
+            "cwe": [
+              "CWE-345",
+              "CWE-347"
+            ]
+          },
+          "ai_rule": "Payment webhooks must verify the provider signature on the raw request body with the webhook secret, reject stale timestamps, and ignore event IDs that were already processed.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A webhook with an invalid signature returns 400 and changes nothing."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C4",
+          "title": "Compute amounts on the server and verify them before fulfilment",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T3"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-602",
+              "CWE-472"
+            ]
+          },
+          "ai_rule": "Never accept prices, totals or currency from the client; compute amounts on the server from the catalog and verify the paid amount and currency before fulfilling an order.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Changing the price in the checkout request does not change the charged amount."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C2",
+          "title": "Never log or store card data; keep only provider tokens and the last 4 digits",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "PAY-T8"
+          ],
+          "standards": {
+            "pci_dss": [
+              "3.3.1",
+              "3.4.1"
+            ],
+            "asvs": [
+              "V7.1.1"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-532"
+            ]
+          },
+          "ai_rule": "Never log, persist or send to analytics any card number, CVV or full payment payload; store only provider IDs plus brand and last 4 digits.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Logs and analytics events from a test checkout contain no card data."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C5",
+          "title": "Idempotent payment and fulfilment operations",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T4"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-362"
+            ]
+          },
+          "ai_rule": "Create charges with idempotency keys and make order fulfilment idempotent (unique constraint or transaction on the payment ID) so it can never run twice.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Delivering the same payment-succeeded event twice concurrently fulfils once."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C6",
+          "title": "Control and monitor scripts on payment pages",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "web"
+          ],
+          "mitigates": [
+            "PAY-T5"
+          ],
+          "standards": {
+            "pci_dss": [
+              "6.4.3",
+              "11.6.1"
+            ],
+            "asvs": [
+              "V14.4.3",
+              "V14.2.3"
+            ],
+            "owasp_top10": [
+              "A08"
+            ],
+            "cwe": [
+              "CWE-829",
+              "CWE-353"
+            ]
+          },
+          "ai_rule": "Do not add third-party scripts to checkout pages; payment pages use a strict CSP and Subresource Integrity for every external script.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Checkout responses carry a CSP without unsafe-inline/unsafe-eval for scripts."
+            }
+          ]
+        },
+        {
+          "id": "PAY-C7",
+          "title": "Throttle and screen payment attempts against card testing",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "PAY-T6"
+          ],
+          "standards": {
+            "owasp_api_top10": [
+              "API6"
+            ],
+            "owasp_top10": [
+              "A04"
+            ],
+            "cwe": [
+              "CWE-799"
+            ]
+          },
+          "ai_rule": "Rate-limit payment and card-setup attempts per user, IP and card fingerprint, and keep the provider's fraud screening enabled.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Repeated declined attempts trigger throttling."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "secrets",
+      "options": {
+        "storage": "secrets_manager",
+        "ci_cd": true
+      },
+      "threats": [
+        {
+          "id": "SEC-T1",
+          "title": "Secrets committed to source control",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-798",
+            "CWE-540"
+          ]
+        },
+        {
+          "id": "SEC-T2",
+          "title": "Secrets shipped inside web bundles or mobile apps",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-798"
+          ]
+        },
+        {
+          "id": "SEC-T3",
+          "title": "Long-lived secrets that are never rotated",
+          "stride": [
+            "S",
+            "I"
+          ],
+          "cwe": [
+            "CWE-324"
+          ]
+        },
+        {
+          "id": "SEC-T4",
+          "title": "Secrets leaked through logs, error reports or CI output",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-532"
+          ]
+        },
+        {
+          "id": "SEC-T5",
+          "title": "Over-privileged credentials magnify any leak",
+          "stride": [
+            "E"
+          ],
+          "cwe": [
+            "CWE-250"
+          ]
+        },
+        {
+          "id": "SEC-T7",
+          "title": "CI/CD compromise exposes deployment credentials",
+          "stride": [
+            "T",
+            "I",
+            "E"
+          ],
+          "cwe": [
+            "CWE-829"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "SEC-C1",
+          "title": "Never commit secrets; scan for them before every commit and in CI",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "SEC-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.10.4"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-798",
+              "CWE-540"
+            ]
+          },
+          "ai_rule": "Never write real secrets, API keys or passwords into code, config or example files; read them from environment variables or a secret store and use placeholders in .env.example.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "A secret scanner runs in pre-commit and CI; .env is gitignored."
+            }
+          ]
+        },
+        {
+          "id": "SEC-C2",
+          "title": "No private secrets in client code",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "SEC-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V2.10.4"
+            ],
+            "masvs": [
+              "MASVS-STORAGE-1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-798"
+            ]
+          },
+          "ai_rule": "Never put secret keys in frontend or mobile code, including NEXT_PUBLIC_, VITE_, EXPO_PUBLIC_ or REACT_APP_ variables; calls that need a secret must go through the backend.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No secret-looking literals or secret env vars referenced in client code."
+            }
+          ]
+        },
+        {
+          "id": "SEC-C3",
+          "title": "Use a secrets manager in production",
+          "severity": "high",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "SEC-T6",
+            "SEC-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V6.4.1"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-522"
+            ]
+          },
+          "ai_rule": "Load production secrets from the configured secrets manager or environment at runtime; never read them from files committed with the code.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Production secrets live in a managed store with access logging."
+            }
+          ]
+        },
+        {
+          "id": "SEC-C5",
+          "title": "Least-privilege credentials, separate per environment",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "SEC-T5"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-250",
+              "CWE-272"
+            ]
+          },
+          "ai_rule": "Use separate, minimally scoped credentials per service and per environment; never reuse production credentials in development or tests.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Production keys have restricted scopes and are not present in dev configs."
+            }
+          ]
+        },
+        {
+          "id": "SEC-C6",
+          "title": "Redact secrets from logs, errors and CI output",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "SEC-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.1.1"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-532"
+            ]
+          },
+          "ai_rule": "Never log or print environment variables, config objects, headers like Authorization, or any secret value; redact them in logs and error reports.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No logging of process.env, config objects or Authorization headers."
+            }
+          ]
+        },
+        {
+          "id": "SEC-C4",
+          "title": "Rotate secrets and prefer short-lived credentials",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "SEC-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V6.4.1"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-324"
+            ]
+          },
+          "ai_rule": "Design code so every secret can be rotated without a code change (read at startup or per use); prefer short-lived credentials or workload identity over static keys.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "There is a documented rotation procedure and it has been exercised."
+            }
+          ]
+        },
+        {
+          "id": "SEC-C7",
+          "title": "Harden the CI/CD pipeline",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "SEC-T7",
+            "SEC-T3"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A08"
+            ],
+            "cwe": [
+              "CWE-829"
+            ]
+          },
+          "ai_rule": "In CI workflows: pin third-party actions to a full commit SHA, use OIDC instead of stored cloud keys, and never expose secrets to fork pull requests.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "CI workflow actions are pinned by SHA."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "logging",
+      "options": {
+        "destination": "log_service",
+        "regulated_data": true
+      },
+      "threats": [
+        {
+          "id": "LOG-T1",
+          "title": "Attacks go undetected because security events are not logged",
+          "stride": [
+            "R"
+          ],
+          "cwe": [
+            "CWE-778"
+          ]
+        },
+        {
+          "id": "LOG-T2",
+          "title": "Passwords, tokens or personal data written to logs",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-532"
+          ]
+        },
+        {
+          "id": "LOG-T3",
+          "title": "Log injection and forged log entries",
+          "stride": [
+            "T",
+            "R"
+          ],
+          "cwe": [
+            "CWE-117"
+          ]
+        },
+        {
+          "id": "LOG-T4",
+          "title": "Logs tampered with, deleted, or readable by too many people",
+          "stride": [
+            "T",
+            "R",
+            "I"
+          ],
+          "cwe": [
+            "CWE-284"
+          ]
+        },
+        {
+          "id": "LOG-T5",
+          "title": "Incidents discovered too late because nobody is alerted",
+          "stride": [
+            "R"
+          ],
+          "cwe": [
+            "CWE-778"
+          ]
+        },
+        {
+          "id": "LOG-T6",
+          "title": "Detailed error messages shown to users",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-209"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "LOG-C1",
+          "title": "Log security-relevant events with enough context",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "LOG-T1"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.1.3",
+              "V7.1.4",
+              "V7.2.1",
+              "V7.2.2"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-778"
+            ]
+          },
+          "ai_rule": "Log authentication events, authorization failures, validation failures and admin actions as structured events with timestamp, user ID, IP, request ID, action and outcome.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A failed login and a 403 each produce a structured security log entry."
+            }
+          ]
+        },
+        {
+          "id": "LOG-C2",
+          "title": "Never log secrets or sensitive personal data",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "LOG-T2"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.1.1",
+              "V7.1.2"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-532"
+            ]
+          },
+          "ai_rule": "Never log passwords, tokens, cookies, Authorization headers, card data or full request bodies; configure logger redaction for these fields.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No logging of req.body, req.headers or password/token variables."
+            }
+          ]
+        },
+        {
+          "id": "LOG-C3",
+          "title": "Structured logging that neutralizes user input",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "LOG-T3"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.3.1"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-117"
+            ]
+          },
+          "ai_rule": "Use the structured logger and pass user-controlled values as separate fields, never concatenated into the log message string.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No string concatenation of request data into log messages."
+            }
+          ]
+        },
+        {
+          "id": "LOG-C4",
+          "title": "Centralized, access-controlled, tamper-resistant log storage",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "LOG-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.3.3",
+              "V7.3.4"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-284"
+            ]
+          },
+          "ai_rule": "Send logs to the central log pipeline (stdout or the configured transport); do not write security logs to local files only.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Application servers cannot delete or modify shipped logs."
+            }
+          ]
+        },
+        {
+          "id": "LOG-C5",
+          "title": "Alert on suspicious activity",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "LOG-T5"
+          ],
+          "standards": {
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-778"
+            ]
+          },
+          "ai_rule": "When adding security-relevant features, emit events that monitoring can alert on (auth failures, permission changes, admin actions).",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "A simulated brute-force attack triggers an alert."
+            }
+          ]
+        },
+        {
+          "id": "LOG-C6",
+          "title": "Generic errors for users, details only in server logs",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "LOG-T6"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.4.1"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-209"
+            ]
+          },
+          "ai_rule": "Route errors through a global handler that returns a generic message with a request ID to the client and logs details server-side.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "An unhandled exception returns a generic body with a request ID."
+            }
+          ]
+        },
+        {
+          "id": "LOG-C7",
+          "title": "Retention limits and access auditing for regulated data in logs",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "LOG-T2",
+            "LOG-T4"
+          ],
+          "standards": {
+            "asvs": [
+              "V7.1.2"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-532"
+            ]
+          },
+          "ai_rule": "Log pseudonymous user IDs instead of names, emails or other personal data.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Log retention and access policies match the applicable regulation."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mobile_storage",
+      "options": {
+        "data": [
+          "auth_tokens",
+          "personal_data",
+          "offline_cache"
+        ]
+      },
+      "threats": [
+        {
+          "id": "MSTORE-T1",
+          "title": "Sensitive data readable from insecure local storage",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-312",
+            "CWE-922"
+          ]
+        },
+        {
+          "id": "MSTORE-T2",
+          "title": "Sensitive data leaked through device logs",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-532"
+          ]
+        },
+        {
+          "id": "MSTORE-T3",
+          "title": "Sensitive data leaked through device or cloud backups",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-530"
+          ]
+        },
+        {
+          "id": "MSTORE-T4",
+          "title": "Leakage through app-switcher screenshots, clipboard or keyboard cache",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-200"
+          ]
+        },
+        {
+          "id": "MSTORE-T5",
+          "title": "Extractable encryption keys (hardcoded or stored in software)",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-321"
+          ]
+        },
+        {
+          "id": "MSTORE-T6",
+          "title": "Data left on the device after logout or account deletion",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-459"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "MSTORE-C1",
+          "title": "Keep tokens and secrets in the Keychain / Android Keystore",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MSTORE-T1"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-STORAGE-1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-312",
+              "CWE-922"
+            ]
+          },
+          "ai_rule": "Store tokens and secrets only in the iOS Keychain (ThisDeviceOnly) or encrypted with an Android Keystore key; never in SharedPreferences, UserDefaults, AsyncStorage or plain files.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No token-like keys written to SharedPreferences, UserDefaults or AsyncStorage."
+            }
+          ]
+        },
+        {
+          "id": "MSTORE-C6",
+          "title": "Hardware-backed, non-exportable keys; no hardcoded keys",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MSTORE-T5"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-CRYPTO-2"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-321",
+              "CWE-798"
+            ]
+          },
+          "ai_rule": "Generate encryption keys inside the Android Keystore or iOS Secure Enclave/Keychain; never hardcode keys or ship them in the app.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No hardcoded key/IV byte arrays or base64 key constants."
+            }
+          ]
+        },
+        {
+          "id": "MSTORE-C2",
+          "title": "Encrypt sensitive local databases and files",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MSTORE-T1"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-STORAGE-1",
+              "MASVS-CRYPTO-2"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-311"
+            ]
+          },
+          "ai_rule": "Sensitive data stored on the device must be minimized and encrypted (SQLCipher or equivalent, iOS NSFileProtectionComplete) with keys from the Keystore/Keychain.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Database and files pulled from a test device are not readable in plaintext."
+            }
+          ]
+        },
+        {
+          "id": "MSTORE-C3",
+          "title": "No sensitive data in logs; strip logging from release builds",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MSTORE-T2"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-STORAGE-2"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-532"
+            ]
+          },
+          "ai_rule": "Never log tokens, credentials or personal data in the mobile app; wrap debug logging so it is stripped from release builds.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No Log.d/print/console.log calls containing token, password or email variables."
+            }
+          ]
+        },
+        {
+          "id": "MSTORE-C4",
+          "title": "Exclude sensitive data from backups",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MSTORE-T3"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-STORAGE-2"
+            ],
+            "cwe": [
+              "CWE-530"
+            ]
+          },
+          "ai_rule": "Exclude tokens and sensitive files from backups (Android dataExtractionRules or allowBackup=false; iOS ThisDeviceOnly Keychain items and isExcludedFromBackup).",
+          "verify": [
+            {
+              "type": "config",
+              "description": "AndroidManifest backup settings exclude sensitive data."
+            }
+          ]
+        },
+        {
+          "id": "MSTORE-C5",
+          "title": "Protect sensitive screens from screenshots, clipboard and keyboard caching",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MSTORE-T4"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-PLATFORM-3",
+              "MASVS-STORAGE-2"
+            ],
+            "cwe": [
+              "CWE-200"
+            ]
+          },
+          "ai_rule": "Screens showing sensitive data must hide content in the app switcher (FLAG_SECURE on Android, blur overlay on iOS); sensitive inputs disable autocorrect and suggestions.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "The app-switcher preview of sensitive screens shows no data."
+            }
+          ]
+        },
+        {
+          "id": "MSTORE-C7",
+          "title": "Wipe local data on logout and account deletion",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MSTORE-T6"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-STORAGE-2"
+            ],
+            "cwe": [
+              "CWE-459"
+            ]
+          },
+          "ai_rule": "Logout must delete stored tokens, caches and the user's local files, and revoke the refresh token on the server.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "After logout, app storage contains no user data."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mobile_platform",
+      "options": {
+        "webviews": false,
+        "deep_links": true,
+        "biometrics": true
+      },
+      "threats": [
+        {
+          "id": "MPLAT-T1",
+          "title": "Traffic read or modified because it is sent in cleartext",
+          "stride": [
+            "I",
+            "T"
+          ],
+          "cwe": [
+            "CWE-319"
+          ]
+        },
+        {
+          "id": "MPLAT-T2",
+          "title": "Man-in-the-middle because certificate validation is disabled or trusts user-installed CAs",
+          "stride": [
+            "I",
+            "T",
+            "S"
+          ],
+          "cwe": [
+            "CWE-295"
+          ]
+        },
+        {
+          "id": "MPLAT-T5",
+          "title": "Malicious links trigger actions or inject data into the app",
+          "stride": [
+            "S",
+            "T"
+          ],
+          "cwe": [
+            "CWE-939"
+          ]
+        },
+        {
+          "id": "MPLAT-T6",
+          "title": "Other apps abuse exported components (activities, services, receivers, providers)",
+          "stride": [
+            "E",
+            "I"
+          ],
+          "cwe": [
+            "CWE-926"
+          ]
+        },
+        {
+          "id": "MPLAT-T7",
+          "title": "Release builds that can be debugged or inspected at runtime",
+          "stride": [
+            "T",
+            "I"
+          ],
+          "cwe": [
+            "CWE-489"
+          ]
+        },
+        {
+          "id": "MPLAT-T9",
+          "title": "Known vulnerabilities in outdated platform versions",
+          "stride": [
+            "E"
+          ],
+          "cwe": [
+            "CWE-1104"
+          ]
+        },
+        {
+          "id": "MPLAT-T10",
+          "title": "Biometric check bypassed because it only returns true/false",
+          "stride": [
+            "S"
+          ],
+          "cwe": [
+            "CWE-287"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "MPLAT-C2",
+          "title": "Never disable certificate validation or trust user-installed CAs in release builds",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MPLAT-T2"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-NETWORK-1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-295"
+            ]
+          },
+          "ai_rule": "Never write trust-all TrustManagers, always-true HostnameVerifiers, disabled iOS trust evaluation, or network configs that trust user CAs outside debug-overrides — not even \"temporarily\".",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No trust-all TrustManager/HostnameVerifier or disabled trust evaluator."
+            }
+          ]
+        },
+        {
+          "id": "MPLAT-C1",
+          "title": "HTTPS only — no cleartext traffic",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MPLAT-T1"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-NETWORK-1"
+            ],
+            "owasp_top10": [
+              "A02"
+            ],
+            "cwe": [
+              "CWE-319"
+            ]
+          },
+          "ai_rule": "Never enable cleartext HTTP in the mobile app: no usesCleartextTraffic or cleartextTrafficPermitted=true on Android, no NSAllowsArbitraryLoads or insecure ATS exceptions on iOS; use https:// URLs only.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "No cleartext permissions in AndroidManifest.xml, network security config or Info.plist."
+            }
+          ]
+        },
+        {
+          "id": "MPLAT-C5",
+          "title": "Treat deep links as untrusted input",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MPLAT-T5"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-PLATFORM-1",
+              "MASVS-CODE-4"
+            ],
+            "cwe": [
+              "CWE-939"
+            ]
+          },
+          "ai_rule": "Validate every deep-link parameter; require user confirmation before acting on a link; prefer verified App Links/Universal Links over custom URL schemes for sensitive flows.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Link handlers validate input and confirm sensitive actions."
+            }
+          ]
+        },
+        {
+          "id": "MPLAT-C6",
+          "title": "Export only the components that must be reachable from other apps",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "android"
+          ],
+          "mitigates": [
+            "MPLAT-T6"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-PLATFORM-1"
+            ],
+            "cwe": [
+              "CWE-926"
+            ]
+          },
+          "ai_rule": "New Android services, receivers and content providers use android:exported=\"false\" unless they must be public, in which case they require a signature-level permission.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "Exported services, receivers and providers declare a permission."
+            }
+          ]
+        },
+        {
+          "id": "MPLAT-C7",
+          "title": "Release builds are not debuggable",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MPLAT-T7"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-RESILIENCE-4"
+            ],
+            "owasp_top10": [
+              "A05"
+            ],
+            "cwe": [
+              "CWE-489"
+            ]
+          },
+          "ai_rule": "Never make release builds debuggable; guard WebView debugging and debug-only features with BuildConfig.DEBUG / #if DEBUG.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "Release build types and manifests are not debuggable."
+            }
+          ]
+        },
+        {
+          "id": "MPLAT-C10",
+          "title": "Bind biometric unlock to a Keystore/Keychain key",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MPLAT-T10"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-AUTH-2"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-287"
+            ]
+          },
+          "ai_rule": "Biometric login must unlock a cryptographic key (BiometricPrompt with a CryptoObject; a Keychain item protected by biometryCurrentSet), never just check a success callback.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "BiometricPrompt is called with a CryptoObject; no bare LAContext.evaluatePolicy for login."
+            }
+          ]
+        },
+        {
+          "id": "MPLAT-C9",
+          "title": "Keep platform versions current and be able to force updates",
+          "severity": "medium",
+          "level": 1,
+          "platforms": [
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "MPLAT-T9"
+          ],
+          "standards": {
+            "masvs": [
+              "MASVS-CODE-1",
+              "MASVS-CODE-2"
+            ],
+            "cwe": [
+              "CWE-1104"
+            ]
+          },
+          "ai_rule": "Do not lower targetSdk or the minimum iOS version; keep build tooling and platform SDKs current.",
+          "verify": [
+            {
+              "type": "config",
+              "description": "targetSdk is recent; a forced-update mechanism exists."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ai_feature",
+      "options": {
+        "capabilities": [
+          "chat",
+          "rag"
+        ],
+        "provider": "hosted_api"
+      },
+      "threats": [
+        {
+          "id": "AI-T1",
+          "title": "Prompt injection (direct, or indirect through documents, emails and web pages)",
+          "stride": [
+            "S",
+            "T",
+            "E"
+          ],
+          "cwe": [
+            "CWE-1427"
+          ]
+        },
+        {
+          "id": "AI-T2",
+          "title": "Sensitive information disclosure through model output",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-200"
+          ]
+        },
+        {
+          "id": "AI-T3",
+          "title": "Improper output handling (XSS, injection or code execution via model output)",
+          "stride": [
+            "T",
+            "E"
+          ],
+          "cwe": [
+            "CWE-79",
+            "CWE-94"
+          ]
+        },
+        {
+          "id": "AI-T5",
+          "title": "System prompt leakage exposes secrets or internal logic",
+          "stride": [
+            "I"
+          ],
+          "cwe": [
+            "CWE-200"
+          ]
+        },
+        {
+          "id": "AI-T6",
+          "title": "RAG returns documents the user may not see, or poisoned content",
+          "stride": [
+            "I",
+            "T"
+          ],
+          "cwe": [
+            "CWE-284"
+          ]
+        },
+        {
+          "id": "AI-T7",
+          "title": "Unbounded consumption (denial of service and denial of wallet)",
+          "stride": [
+            "D"
+          ],
+          "cwe": [
+            "CWE-770"
+          ]
+        },
+        {
+          "id": "AI-T8",
+          "title": "Model provider API key extracted from the client app",
+          "stride": [
+            "I",
+            "S"
+          ],
+          "cwe": [
+            "CWE-798"
+          ]
+        }
+      ],
+      "controls": [
+        {
+          "id": "AI-C1",
+          "title": "Treat model input as untrusted; enforce security outside the model",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AI-T1"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM01"
+            ],
+            "cwe": [
+              "CWE-1427"
+            ]
+          },
+          "ai_rule": "Never rely on prompt instructions for security: enforce authorization and business rules in code around the LLM call, and pass user/retrieved content as clearly delimited data.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "An \"ignore previous instructions\" payload cannot reach data or actions the user lacks access to."
+            }
+          ]
+        },
+        {
+          "id": "AI-C2",
+          "title": "Treat model output as untrusted input",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AI-T3"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM05"
+            ],
+            "owasp_top10": [
+              "A03"
+            ],
+            "cwe": [
+              "CWE-79",
+              "CWE-94"
+            ]
+          },
+          "ai_rule": "Treat LLM output as untrusted: sanitize before rendering (no innerHTML or raw-HTML Markdown), validate structured output with a schema, and never eval or execute it outside a sandbox.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Model output containing <img onerror> is rendered inert."
+            }
+          ]
+        },
+        {
+          "id": "AI-C8",
+          "title": "Call the model from the backend only",
+          "severity": "critical",
+          "level": 1,
+          "platforms": [
+            "web",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AI-T8"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM10"
+            ],
+            "owasp_top10": [
+              "A07"
+            ],
+            "cwe": [
+              "CWE-798"
+            ]
+          },
+          "ai_rule": "Never call the LLM provider directly from frontend or mobile code with an API key; route every call through the backend.",
+          "verify": [
+            {
+              "type": "semgrep",
+              "description": "No LLM SDK imports or provider API keys in client code."
+            }
+          ]
+        },
+        {
+          "id": "AI-C4",
+          "title": "Keep secrets and other users' data out of prompts",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AI-T5",
+            "AI-T2"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM07",
+              "LLM02"
+            ],
+            "cwe": [
+              "CWE-200"
+            ]
+          },
+          "ai_rule": "Never put API keys, credentials, or data the current user is not authorized to see into prompts or system prompts; assume all prompt content can be extracted.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "System prompts and context builders contain no secrets or cross-user data."
+            }
+          ]
+        },
+        {
+          "id": "AI-C5",
+          "title": "Enforce permissions at retrieval time and vet ingested sources",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AI-T6"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM08",
+              "LLM04"
+            ],
+            "owasp_top10": [
+              "A01"
+            ],
+            "cwe": [
+              "CWE-284"
+            ]
+          },
+          "ai_rule": "RAG retrieval must filter by the current user's tenant and permissions inside the vector query, before any content reaches the model.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "A user's question cannot retrieve another tenant's documents."
+            }
+          ]
+        },
+        {
+          "id": "AI-C6",
+          "title": "Rate limits, token limits and spending caps",
+          "severity": "high",
+          "level": 1,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AI-T7"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM10"
+            ],
+            "owasp_api_top10": [
+              "API4"
+            ],
+            "cwe": [
+              "CWE-770"
+            ]
+          },
+          "ai_rule": "Every LLM call must have per-user rate limiting, max input/output token limits and a timeout.",
+          "verify": [
+            {
+              "type": "test",
+              "description": "Exceeding the per-user LLM quota returns 429."
+            }
+          ]
+        },
+        {
+          "id": "AI-C7",
+          "title": "Minimize and protect data sent to hosted model providers",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "web",
+            "backend",
+            "android",
+            "ios"
+          ],
+          "mitigates": [
+            "AI-T2"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM02"
+            ],
+            "cwe": [
+              "CWE-359"
+            ]
+          },
+          "ai_rule": "Send the minimum data needed to the model provider and redact personal data that the feature does not need.",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Provider data-retention terms are reviewed and documented."
+            }
+          ]
+        },
+        {
+          "id": "AI-C9",
+          "title": "Log AI interactions and tool calls for audit",
+          "severity": "medium",
+          "level": 2,
+          "platforms": [
+            "backend"
+          ],
+          "mitigates": [
+            "AI-T1"
+          ],
+          "standards": {
+            "owasp_llm_top10": [
+              "LLM01",
+              "LLM06"
+            ],
+            "owasp_top10": [
+              "A09"
+            ],
+            "cwe": [
+              "CWE-778"
+            ]
+          },
+          "ai_rule": "Log every LLM tool call (tool name, arguments with secrets redacted, user ID, outcome).",
+          "verify": [
+            {
+              "type": "manual",
+              "description": "Tool invocations appear in the audit log."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

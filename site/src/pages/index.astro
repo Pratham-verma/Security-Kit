@@ -1,0 +1,140 @@
+---
+// Landing page. Static HTML + one stylesheet; no client-side JavaScript.
+import { loadBundledKnowledgeBase } from '@seckit/core/browser';
+import '../styles/landing.css';
+
+const kb = loadBundledKnowledgeBase();
+const controls = [...kb.components.values()].reduce((n, c) => n + c.controls.length, 0);
+const components = kb.components.size;
+const tools = ['Claude Code', 'Cursor', 'GitHub Copilot', 'Gemini CLI', 'Codex', 'any AI coding tool'];
+const standards = ['OWASP ASVS 4.0.3', 'OWASP MASVS', 'OWASP Top 10', 'OWASP API Top 10', 'OWASP LLM Top 10', 'PCI DSS 4.0', 'CWE'];
+const description = 'Security Kit helps developers build more secure applications. Describe what your application does and get a tailored security checklist — or a prompt for your AI coding assistant — mapped to OWASP, MASVS, PCI DSS and CWE.';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#15803d" />
+    <title>Security Kit — security that fits your app</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content="Security Kit — security that fits your app" />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <img src="/favicon.svg" alt="" width="30" height="30" />
+        <span>Security Kit</span>
+      </a>
+      <nav aria-label="Main">
+        <a href="/docs/project/about/">About</a>
+        <a href="/docs/">Docs</a>
+        <a href="/docs/controls/">Controls</a>
+        <a class="btn btn-primary btn-sm" href="/app/">Open the app</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Free and open source · Apache-2.0</p>
+        <h1>Security that fits <span class="accent">your</span> app</h1>
+        <p class="lead">
+          Security Kit helps developers build more secure applications by turning application requirements into actionable security controls.
+          Simply describe what your application does, and Security Kit generates a tailored security checklist mapped to recognized standards and frameworks, including OWASP, MASVS, PCI DSS, and CWE.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="/app/">Start — it's free</a>
+          <a class="btn btn-secondary" href="/docs/">How it works</a>
+        </div>
+        <p class="fine">Runs in your browser. No account. Nothing about your app is uploaded.</p>
+      </section>
+
+      <section class="about" aria-labelledby="about">
+        <h2 id="about">About Security Kit</h2>
+        <p>Whether you're building a web app, mobile app, API, or AI-powered product, Security Kit helps you identify the security controls relevant to your application without having to navigate complex security documentation yourself.</p>
+        <p>Running on AWS? Security Kit also secures where your app lives — your AWS account, compute, storage, databases and end-user services — with checks based on the CIS AWS Benchmarks and ready-to-run test cases for each one.</p>
+        <p>Use the generated checklist to guide your security implementation, or transform it into a structured prompt for your AI coding assistant to help implement security directly in your code.</p>
+        <p>Our mission is to make application security practical, accessible, and easier to integrate into every stage of development.</p>
+        <p class="about-tag">Security shouldn't be an afterthought. With Security Kit, it becomes part of how you build.</p>
+      </section>
+
+      <section class="steps" aria-labelledby="how">
+        <h2 id="how">How it works</h2>
+        <ol>
+          <li>
+            <span class="num">1</span>
+            <h3>Describe your app</h3>
+            <p>Answer a few questions, or point it at your project folder and it fills them in from your dependencies — read in your browser, never uploaded.</p>
+          </li>
+          <li>
+            <span class="num">2</span>
+            <h3>Get your kit</h3>
+            <p>Only the controls your app needs — out of {controls} across {components} areas — each with what to check, how to fix it, and the standards it covers.</p>
+          </li>
+          <li>
+            <span class="num">3</span>
+            <h3>Check every item</h3>
+            <p>Tick them off yourself, or paste one prompt into your AI tool: it reviews your code item by item, fixes what is missing, and reports back.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="split">
+        <div class="card">
+          <h2>📋 A checklist for you</h2>
+          <p>Most important first. Each item says what to check and how to do it, in plain words, with ready-made helpers where they exist. Progress is saved; download it as Markdown or print it.</p>
+          <a href="/docs/guides/checklist/">About the checklist →</a>
+        </div>
+        <div class="card">
+          <h2>🤖 A prompt for your AI</h2>
+          <p>One prompt with your app's full security plan. Ask the AI to check and fix your existing code, or to follow the rules while it builds new features.</p>
+          <p class="chips">{tools.map((t) => <span class="chip">{t}</span>)}</p>
+          <a href="/docs/guides/ai-prompt/">About the AI prompt →</a>
+        </div>
+      </section>
+
+      <section class="standards" aria-labelledby="std">
+        <h2 id="std">Mapped to the standards that matter</h2>
+        <p class="chips center">{standards.map((s) => <span class="chip chip-mono">{s}</span>)}</p>
+        <p class="muted center">Web, backend, Android and iOS apps. <a href="/docs/controls/standards/">See every mapping</a>.</p>
+      </section>
+
+      <section class="local" aria-labelledby="local">
+        <div>
+          <h2 id="local">Then scan your code — on your computer</h2>
+          <p>
+            The free command-line tool uses the same plan to scan your project for leaked secrets, injection, weak password
+            hashing, insecure mobile settings and more, with the file and line of every problem. Run it locally or in CI.
+          </p>
+          <a href="/docs/getting-started/cli/">Install the CLI →</a>
+        </div>
+        <pre><code><span class="muted"># in your project folder</span>
+npx seckit init       <span class="muted"># describe your app</span>
+npx seckit audit      <span class="muted"># scan your code</span>
+npx seckit ui         <span class="muted"># the full app, locally</span></code></pre>
+      </section>
+
+      <section class="privacy">
+        <h2>Private by design</h2>
+        <ul>
+          <li><strong>No backend.</strong> The website is static files; the engine runs in your browser.</li>
+          <li><strong>No account, no tracking.</strong> No cookies, no analytics, no telemetry in the CLI.</li>
+          <li><strong>Your code stays yours.</strong> Scans run on your machine. Folder detection reads dependency files locally and never opens <code>.env</code> files.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Security Kit · Apache-2.0</span>
+      <nav aria-label="Footer">
+        <a href="/docs/">Docs</a>
+        <a href="/docs/project/privacy/">Privacy</a>
+        <a href="/docs/project/contributing/">Contribute</a>
+      </nav>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,244 @@
+id: aws_database
+name: AWS managed databases
+description: Managed databases on AWS — RDS and Aurora, DynamoDB, ElastiCache and MemoryDB, DocumentDB, Neptune, Keyspaces and Timestream.
+category: cloud
+order: 230
+question: Does the app use an AWS managed database (RDS, Aurora, DynamoDB, ElastiCache, DocumentDB…)?
+platforms: [cloud]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    services:
+      title: Which AWS database services does the app use?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [rds, aurora, dynamodb, elasticache, memorydb, documentdb, neptune, keyspaces, timestream]
+
+threats:
+  - id: AWSDB-T1
+    title: Database reachable from the internet
+    stride: [I, E]
+    cwe: [CWE-284]
+  - id: AWSDB-T2
+    title: Data, snapshots or backups read without authorization
+    stride: [I]
+    cwe: [CWE-311, CWE-200]
+  - id: AWSDB-T3
+    title: Traffic to the database intercepted
+    stride: [I, T]
+    cwe: [CWE-319]
+  - id: AWSDB-T4
+    title: Data lost through deletion, corruption or outage
+    stride: [D, T]
+    cwe: [CWE-1188]
+  - id: AWSDB-T5
+    title: Database access and changes not recorded
+    stride: [R]
+    cwe: [CWE-778]
+  - id: AWSDB-T6
+    title: Known vulnerabilities in old engine versions
+    stride: [E]
+    cwe: [CWE-1104]
+
+controls:
+  - id: AWSDB-C1
+    title: Databases are never publicly accessible
+    mitigates: [AWSDB-T1]
+    severity: critical
+    level: 1
+    standards:
+      cis_aws: [Foundations 3.2.3, Database 2.3, Database 3.3, Database 7.3, Database 9.3]
+      owasp_top10: [A05]
+      cwe: [CWE-284]
+    guidance: |
+      Put database instances and clusters in private subnets with `publicly_accessible = false`, and let their
+      security groups accept the database port only from the application's security group (never from
+      0.0.0.0/0 or broad CIDRs). Use VPC endpoints for DynamoDB and Keyspaces.
+    ai_rule: >-
+      Database instances and clusters must set publicly_accessible = false, live in private subnets, and allow
+      the database port only from the app's security group.
+    verify:
+      - type: semgrep
+        description: IaC databases are not publicly accessible.
+    tests:
+      - "`aws rds describe-db-instances --query 'DBInstances[?PubliclyAccessible==`true`].DBInstanceIdentifier'` returns an empty list."
+      - "`aws rds describe-db-snapshots --snapshot-type manual` then `aws rds describe-db-snapshot-attributes --db-snapshot-identifier <s>` — no snapshot has `restore` shared with `all`."
+      - "The database security groups (`aws ec2 describe-security-groups --group-ids <sg>`) allow the DB port only from application security groups."
+
+  - id: AWSDB-C2
+    title: Encrypt databases, snapshots and backups at rest
+    mitigates: [AWSDB-T2]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Foundations 3.2.1, Database 2.2, Database 3.2, Database 4.3, Database 5.4, Database 6.3, Database 7.2, Database 9.2, Database 10.2]
+      owasp_top10: [A02]
+      cwe: [CWE-311]
+    guidance: |
+      Create every RDS instance, Aurora/DocumentDB/Neptune cluster, ElastiCache/MemoryDB cluster and Timestream
+      database with encryption at rest, using a customer-managed KMS key for sensitive data. Encryption cannot be
+      turned on later for RDS — copy an encrypted snapshot and restore it.
+    ai_rule: >-
+      Every database you define must set storage_encrypted / at_rest_encryption_enabled = true (with a
+      customer-managed kms_key_id for sensitive data).
+    verify:
+      - type: semgrep
+        description: IaC databases and caches are encrypted at rest.
+    tests:
+      - "`aws rds describe-db-instances --query 'DBInstances[].[DBInstanceIdentifier,StorageEncrypted]'` shows `true` for every instance."
+      - "`aws rds describe-db-clusters --query 'DBClusters[].[DBClusterIdentifier,StorageEncrypted]'` shows `true` for every cluster (Aurora, DocumentDB, Neptune)."
+      - "`aws elasticache describe-replication-groups --query 'ReplicationGroups[].[ReplicationGroupId,AtRestEncryptionEnabled]'` shows `true`."
+      - "`aws dynamodb describe-table --table-name <t> --query Table.SSEDescription` shows `KMS` for tables with sensitive data."
+
+  - id: AWSDB-C3
+    title: TLS required for every database connection
+    mitigates: [AWSDB-T3]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Database 2.4, Database 3.4, Database 5.3, Database 6.2, Database 7.4, Database 9.4]
+      owasp_top10: [A02]
+      cwe: [CWE-319]
+    guidance: |
+      Force TLS on the server (`rds.force_ssl=1` / `require_secure_transport=ON` in the parameter group, `tls`
+      enabled for DocumentDB and Neptune, `transit_encryption_enabled` for ElastiCache) and verify the
+      server certificate in the client using the AWS RDS CA bundle.
+    ai_rule: >-
+      Database parameter groups must force TLS (rds.force_ssl=1 or require_secure_transport=ON), caches must set
+      transit_encryption_enabled = true, and clients must verify the server certificate.
+    verify:
+      - type: semgrep
+        description: IaC caches enable transit encryption.
+    tests:
+      - "`aws rds describe-db-parameters --db-parameter-group-name <pg> --query \"Parameters[?ParameterName=='rds.force_ssl' || ParameterName=='require_secure_transport'].[ParameterName,ParameterValue]\"` shows `1` / `ON`."
+      - "`aws elasticache describe-replication-groups --query 'ReplicationGroups[].[ReplicationGroupId,TransitEncryptionEnabled]'` shows `true`."
+      - "Connecting without TLS (e.g. `psql \"sslmode=disable host=<endpoint> …\"`) is refused."
+
+  - id: AWSDB-C4
+    title: Database authentication through IAM or managed secrets
+    mitigates: [AWSDB-T2]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Database 2.5, Database 3.5, Database 5.2, Database 6.4, Database 9.5]
+      owasp_top10: [A07]
+      cwe: [CWE-798, CWE-306]
+    guidance: |
+      Prefer IAM database authentication; otherwise let RDS manage the master password in Secrets Manager
+      (`manage_master_user_password = true`) with rotation. Turn on AUTH/RBAC for ElastiCache and ACLs for
+      MemoryDB. Never use the default admin username or a password in code.
+    ai_rule: >-
+      Enable iam_database_authentication_enabled or manage_master_user_password; never set a literal password on
+      a database resource, and enable AUTH/ACLs on caches.
+    verify:
+      - type: semgrep
+        description: IaC databases do not set literal passwords.
+    tests:
+      - "`aws rds describe-db-instances --query 'DBInstances[].[DBInstanceIdentifier,IAMDatabaseAuthenticationEnabled,MasterUserSecret.SecretArn]'` — IAM auth is `true` or a managed secret is present."
+      - "`aws secretsmanager describe-secret --secret-id <arn>` shows `RotationEnabled: true`."
+      - "`aws elasticache describe-replication-groups --query 'ReplicationGroups[].[ReplicationGroupId,AuthTokenEnabled,UserGroupIds]'` shows AUTH or user groups."
+
+  - id: AWSDB-C5
+    title: Automated backups, point-in-time recovery and deletion protection
+    mitigates: [AWSDB-T4]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Database 2.6, Database 3.6, Database 3.7, Database 4.4, Database 4.5, Database 5.6, Database 7.6, Database 9.6]
+      cwe: [CWE-1188]
+    guidance: |
+      Keep automated backups (retention of at least 7 days for production), enable point-in-time recovery for
+      DynamoDB, turn on deletion protection for production databases and tables, and include them in your AWS
+      Backup plan.
+    ai_rule: >-
+      Production databases must set backup_retention_period >= 7 and deletion_protection = true; DynamoDB tables
+      must enable point_in_time_recovery and deletion protection.
+    verify:
+      - type: semgrep
+        description: IaC DynamoDB tables enable point-in-time recovery.
+    tests:
+      - "`aws rds describe-db-instances --query 'DBInstances[].[DBInstanceIdentifier,BackupRetentionPeriod,DeletionProtection]'` shows retention >= 7 and `true`."
+      - "`aws dynamodb describe-continuous-backups --table-name <t>` shows `PointInTimeRecoveryStatus: ENABLED`."
+      - "`aws dynamodb describe-table --table-name <t> --query Table.DeletionProtectionEnabled` returns `true`."
+
+  - id: AWSDB-C6
+    title: Highly available production databases
+    mitigates: [AWSDB-T4]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Database 3.8, Database 5.5]
+      cwe: [CWE-1188]
+    guidance: Run production RDS with Multi-AZ, Aurora/DocumentDB with replicas in another AZ, and ElastiCache with automatic failover.
+    ai_rule: Production RDS instances must set multi_az = true; caches must enable automatic failover with replicas.
+    verify:
+      - type: manual
+        description: Production databases span more than one Availability Zone.
+    tests:
+      - "`aws rds describe-db-instances --query 'DBInstances[].[DBInstanceIdentifier,MultiAZ]'` shows `true` for production instances."
+      - "`aws elasticache describe-replication-groups --query 'ReplicationGroups[].[ReplicationGroupId,AutomaticFailover,MultiAZ]'` shows `enabled`."
+
+  - id: AWSDB-C7
+    title: Supported engine versions with automatic minor upgrades
+    mitigates: [AWSDB-T6]
+    severity: medium
+    level: 1
+    standards:
+      cis_aws: [Foundations 3.2.2, Database 2.7, Database 3.9, Database 7.7, Database 9.7]
+      cwe: [CWE-1104]
+    guidance: Turn on automatic minor version upgrades within a maintenance window and plan major upgrades before end of standard support (to avoid extended-support risk and fees).
+    ai_rule: Database instances must set auto_minor_version_upgrade = true and use a supported engine version.
+    verify:
+      - type: manual
+        description: Auto minor upgrades on; no engine past end of standard support.
+    tests:
+      - "`aws rds describe-db-instances --query 'DBInstances[].[DBInstanceIdentifier,Engine,EngineVersion,AutoMinorVersionUpgrade]'` shows `true` and supported versions."
+      - "`aws rds describe-pending-maintenance-actions` shows no overdue required updates."
+
+  - id: AWSDB-C8
+    title: Database audit and error logs exported
+    mitigates: [AWSDB-T5]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [Database 2.8, Database 3.10, Database 4.6, Database 5.7, Database 7.8, Database 9.8]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: |
+      Export database logs (PostgreSQL logs, MySQL audit/error/slow logs, DocumentDB and Neptune audit logs) to
+      CloudWatch Logs, enable Database Activity Streams for sensitive Aurora/RDS databases, and record DynamoDB
+      data events in CloudTrail where needed.
+    ai_rule: Database instances and clusters must set enabled_cloudwatch_logs_exports with the engine's audit or error logs.
+    verify:
+      - type: manual
+        description: Logs reach CloudWatch for every production database.
+    tests:
+      - "`aws rds describe-db-instances --query 'DBInstances[].[DBInstanceIdentifier,EnabledCloudwatchLogsExports]'` lists audit/error (or postgresql) logs."
+      - "`aws rds describe-db-clusters --query 'DBClusters[].[DBClusterIdentifier,EnabledCloudwatchLogsExports,ActivityStreamStatus]'` shows logs exported (and activity streams for sensitive data)."
+
+  - id: AWSDB-C9
+    title: Least-privilege database access policies
+    mitigates: [AWSDB-T2]
+    severity: medium
+    level: 1
+    when:
+      services: [dynamodb, keyspaces, timestream]
+    standards:
+      cis_aws: [Database 4.2, Database 8.2, Database 10.3]
+      owasp_top10: [A01]
+      cwe: [CWE-269]
+    guidance: |
+      Give the application role access only to its own tables and only the actions it uses (for example
+      `dynamodb:GetItem`/`PutItem`/`Query` on one table ARN), use fine-grained conditions such as
+      `dynamodb:LeadingKeys` for per-user data, and reach the service through VPC endpoints.
+    ai_rule: IAM policies for DynamoDB, Keyspaces and Timestream must list specific actions and table ARNs, never "dynamodb:*" or Resource "*".
+    verify:
+      - type: semgrep
+        description: IaC policies do not grant wildcard actions on all resources.
+    tests:
+      - "`aws iam get-role-policy` / `get-policy-version` for the app role — DynamoDB statements list specific actions and table ARNs, no `dynamodb:*` on `*`."
+      - "`aws ec2 describe-vpc-endpoints --filters Name=service-name,Values=com.amazonaws.<region>.dynamodb` shows an endpoint for the app's VPC."

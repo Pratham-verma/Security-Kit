@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://securitykit.dev/schemas/seckit.schema.json",
+  "title": "Security Kit app manifest (seckit.yaml)",
+  "description": "Describes an application so Security Kit can generate the security controls it needs. Component options are validated against the matching knowledge-base component.",
+  "type": "object",
+  "required": ["version", "app", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "app": {
+      "type": "object",
+      "required": ["name", "platforms"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/platform" }
+        },
+        "data_sensitivity": {
+          "description": "Highest sensitivity of data the app handles.",
+          "enum": ["low", "medium", "high"],
+          "default": "medium"
+        },
+        "assurance_level": {
+          "description": "ASVS-style level. 1 = baseline, 2 = most apps with sensitive data, 3 = critical (finance, health).",
+          "enum": [1, 2, 3],
+          "default": 2
+        }
+      }
+    },
+    "standards": {
+      "description": "Standards to report against.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["asvs", "masvs", "owasp_top10", "owasp_api_top10", "owasp_llm_top10", "cwe", "pci_dss", "cis_aws"] }
+    },
+    "ai_assistants": {
+      "description": "AI coding assistants that receive the generated security rules.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["agents_md", "claude", "cursor", "copilot"] },
+      "default": ["agents_md"]
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "name": { "type": "string", "description": "Optional label when a component type appears more than once." }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "platform": { "enum": ["web", "backend", "android", "ios", "cloud"] }
+  }
+}

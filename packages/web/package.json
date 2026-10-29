@@ -1,0 +1,46 @@
+{
+  "name": "@seckit/web",
+  "version": "0.1.0",
+  "description": "Security Kit for the browser: safe HTML, Trusted Types, in-memory tokens, safe URLs.",
+  "keywords": [
+    "security",
+    "xss",
+    "dompurify",
+    "trusted-types"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.17"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.5"
+  }
+}

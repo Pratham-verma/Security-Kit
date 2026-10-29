@@ -1,0 +1,363 @@
+id: api
+name: API
+description: HTTP, GraphQL, gRPC or WebSocket endpoints the backend exposes to its own clients or to third parties.
+order: 30
+question: Does the backend expose an API (REST, GraphQL, gRPC, WebSocket)?
+platforms: [backend]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    style:
+      title: Which API styles?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [rest, graphql, grpc, websocket]
+    consumers:
+      title: Who calls the API?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [own_frontend, own_mobile_app, third_parties, internal_services]
+    fetches_user_urls:
+      title: Does the API fetch URLs that users supply (webhooks, link previews, imports, avatars by URL)?
+      type: boolean
+      default: false
+
+threats:
+  - id: API-T1
+    title: Broken object-level authorization (accessing other users' records by ID)
+    stride: [I, E]
+    cwe: [CWE-639]
+
+  - id: API-T2
+    title: Broken function-level authorization (calling admin or other privileged endpoints)
+    stride: [E]
+    cwe: [CWE-285]
+
+  - id: API-T3
+    title: Mass assignment and excessive data exposure
+    description: Clients set fields they should not (role, price, owner) or receive fields they should not see.
+    stride: [T, I]
+    cwe: [CWE-915, CWE-213]
+
+  - id: API-T4
+    title: Unrestricted resource consumption
+    stride: [D]
+    cwe: [CWE-770]
+
+  - id: API-T5
+    title: Injection through unvalidated input
+    stride: [T]
+    cwe: [CWE-20]
+
+  - id: API-T6
+    title: Server-side request forgery (SSRF)
+    stride: [I, E]
+    cwe: [CWE-918]
+    when:
+      fetches_user_urls: [true]
+
+  - id: API-T7
+    title: Cross-origin data theft through permissive CORS
+    stride: [I]
+    cwe: [CWE-942]
+
+  - id: API-T8
+    title: GraphQL abuse (deep or batched queries, schema introspection)
+    stride: [D, I]
+    cwe: [CWE-770]
+    when:
+      style: [graphql]
+
+  - id: API-T9
+    title: Internal details leaked through errors, debug modes or version headers
+    stride: [I]
+    cwe: [CWE-209, CWE-489]
+
+  - id: API-T10
+    title: Forgotten, undocumented or old API versions left exposed
+    stride: [I, E]
+    cwe: [CWE-1059]
+
+  - id: API-T11
+    title: Credentials or tokens exposed in URLs
+    stride: [I]
+    cwe: [CWE-598]
+
+  - id: API-T12
+    title: Abuse of over-privileged or leaked third-party API credentials
+    stride: [S, E]
+    cwe: [CWE-285]
+    when:
+      consumers: [third_parties]
+
+  - id: API-T13
+    title: Cross-site WebSocket hijacking and unauthorized messages
+    stride: [S, E]
+    cwe: [CWE-1385]
+    when:
+      style: [websocket]
+
+controls:
+  - id: API-C1
+    title: Check object-level authorization on every request that takes a resource ID
+    mitigates: [API-T1]
+    severity: critical
+    level: 1
+    standards:
+      asvs: [V4.2.1, V13.1.4]
+      owasp_api_top10: [API1]
+      owasp_top10: [A01]
+      cwe: [CWE-639]
+    guidance: |
+      For every endpoint that reads or changes a record by ID, verify on the server that the
+      current user may access *that* record (e.g. `WHERE id = $1 AND owner_id = $user`).
+      Being logged in is not enough, and unguessable IDs (UUIDs) are not authorization.
+    ai_rule: >-
+      Every handler that loads or changes a record by ID must check that the current user is
+      allowed to access that specific record (scope the query by owner/tenant); being
+      authenticated is not enough.
+    verify:
+      - type: test
+        description: User A requesting user B's resource by ID gets 403/404.
+
+  - id: API-C2
+    title: Deny-by-default function-level authorization
+    mitigates: [API-T2]
+    severity: critical
+    level: 1
+    standards:
+      asvs: [V4.1.3, V4.1.5]
+      owasp_api_top10: [API5]
+      owasp_top10: [A01]
+      cwe: [CWE-285]
+    guidance: |
+      Enforce roles/permissions in server-side middleware applied to every route by default;
+      public routes are explicitly marked as such. Never rely on hiding buttons in the UI.
+    ai_rule: >-
+      Apply authorization middleware to all routes by default and explicitly mark public
+      ones; check roles/permissions on the server for every privileged action, never only in the UI.
+    verify:
+      - type: test
+        description: A regular user calling an admin endpoint gets 403.
+
+  - id: API-C3
+    title: Validate requests against a schema and return explicit response shapes
+    mitigates: [API-T3, API-T5]
+    severity: high
+    level: 1
+    standards:
+      asvs: [V5.1.2, V5.1.3, V13.2.2]
+      owasp_api_top10: [API3]
+      owasp_top10: [A03]
+      cwe: [CWE-915, CWE-213, CWE-20]
+    guidance: |
+      Validate every request body, query and path parameter with a schema (type, length,
+      format, allowed values) and reject unknown fields. Never pass a request body straight
+      into an ORM create/update. Build responses from explicit DTOs instead of serializing
+      database models.
+    ai_rule: >-
+      Validate every request with a schema that rejects unknown fields; never pass req.body
+      directly to an ORM create/update; return explicit response objects, never whole
+      database models.
+    verify:
+      - type: semgrep
+        description: No ORM create/update called with the raw request body.
+      - type: test
+        description: Sending role=admin in a profile update has no effect.
+
+  - id: API-C4
+    title: Rate limits, pagination caps, payload limits and timeouts
+    mitigates: [API-T4]
+    severity: high
+    level: 1
+    standards:
+      asvs: [V11.1.4]
+      owasp_api_top10: [API4]
+      owasp_top10: [A04]
+      cwe: [CWE-770]
+    guidance: |
+      Rate-limit per user and per IP, cap page sizes (e.g. max 100), limit request body
+      size, and set timeouts on expensive operations and upstream calls.
+    ai_rule: >-
+      List endpoints must enforce a maximum page size; apply rate limits, request body size
+      limits and timeouts to all API routes.
+    implement:
+      node: rateLimit() middleware
+    verify:
+      - type: test
+        description: limit=100000 is clamped; exceeding the rate limit returns 429.
+
+  - id: API-C5
+    title: Protect outbound requests to user-supplied URLs against SSRF
+    mitigates: [API-T6]
+    severity: critical
+    level: 1
+    when:
+      fetches_user_urls: [true]
+    standards:
+      asvs: [V5.2.6]
+      owasp_api_top10: [API7]
+      owasp_top10: [A10]
+      cwe: [CWE-918]
+    guidance: |
+      Allow only http/https, resolve DNS and block private, loopback, link-local and cloud
+      metadata addresses (169.254.169.254, fd00::/8, ...) on every redirect hop; prefer an
+      allow-list of destinations; route fetches through an egress proxy; cap response size and time.
+    ai_rule: >-
+      Before fetching a user-supplied URL: allow only http/https, resolve DNS and reject
+      private/loopback/link-local/metadata IPs on every redirect, and cap size and time; prefer
+      an allow-list of hosts.
+    implement:
+      node: safeFetch() — validates every resolved IP at connect time, including redirects
+    verify:
+      - type: test
+        description: Fetching http://169.254.169.254/ and http://localhost/ is refused.
+
+  - id: API-C6
+    title: Strict CORS allow-list
+    mitigates: [API-T7]
+    severity: high
+    level: 1
+    standards:
+      asvs: [V14.5.3]
+      owasp_api_top10: [API8]
+      owasp_top10: [A05]
+      cwe: [CWE-942]
+    guidance: |
+      Allow only the exact origins you own. Never reflect the request `Origin` header and never
+      combine `Access-Control-Allow-Credentials: true` with a wildcard or `null` origin.
+    ai_rule: >-
+      Configure CORS with an explicit list of allowed origins; never reflect the request
+      Origin, never allow "null", and never use "*" with credentials.
+    implement:
+      node: strictCors() middleware
+    verify:
+      - type: test
+        description: A request from https://evil.example gets no Access-Control-Allow-Origin header.
+
+  - id: API-C7
+    title: Limit GraphQL depth, complexity and batching; authorize in resolvers
+    mitigates: [API-T8]
+    severity: high
+    level: 1
+    when:
+      style: [graphql]
+    standards:
+      asvs: [V13.4.1, V13.4.2]
+      owasp_api_top10: [API4, API8]
+      cwe: [CWE-770]
+    guidance: |
+      Enforce query depth and cost limits, cap aliases and batched operations, disable
+      introspection in production (or use persisted queries), and check authorization in each
+      resolver or the business layer.
+    ai_rule: >-
+      GraphQL servers must enforce query depth/complexity limits, cap batching and aliases,
+      disable introspection in production, and check authorization in resolvers.
+    verify:
+      - type: test
+        description: A 20-level nested query is rejected; introspection is disabled in production.
+
+  - id: API-C8
+    title: Generic errors, no debug mode or version headers in production
+    mitigates: [API-T9]
+    severity: medium
+    level: 1
+    standards:
+      asvs: [V7.4.1, V14.3.2, V14.3.3]
+      owasp_api_top10: [API8]
+      owasp_top10: [A05]
+      cwe: [CWE-209, CWE-489]
+    guidance: |
+      Return generic error messages with a correlation ID; log the details server-side. Disable
+      debug modes, stack traces and framework banners (e.g. `X-Powered-By`) in production.
+    ai_rule: >-
+      API error responses must not include stack traces, SQL errors or internal paths; return
+      a generic message with a request ID and log details server-side; disable X-Powered-By and debug modes.
+    implement:
+      node: securityHeaders() removes X-Powered-By
+    verify:
+      - type: test
+        description: A forced 500 error returns no stack trace.
+
+  - id: API-C9
+    title: Keep an API inventory and retire old versions
+    mitigates: [API-T10]
+    severity: medium
+    level: 2
+    standards:
+      owasp_api_top10: [API9]
+      owasp_top10: [A05]
+      cwe: [CWE-1059]
+    guidance: |
+      Document every endpoint (e.g. OpenAPI), version the API, remove deprecated versions on a
+      schedule, and never deploy debug or test endpoints to production.
+    ai_rule: >-
+      Document new endpoints in the API spec; do not add debug, test or temporary endpoints
+      without removing them before merge.
+    verify:
+      - type: manual
+        description: Routes in production match the documented API inventory.
+
+  - id: API-C10
+    title: Send credentials in headers, never in URLs
+    mitigates: [API-T11]
+    severity: medium
+    level: 1
+    standards:
+      asvs: [V13.1.3, V8.3.1]
+      owasp_api_top10: [API2]
+      owasp_top10: [A07]
+      cwe: [CWE-598]
+    guidance: API keys and tokens go in the Authorization header (or a cookie), never in query strings, which are logged everywhere.
+    ai_rule: Accept API keys and tokens only from headers or cookies, never from query string parameters.
+    verify:
+      - type: semgrep
+        description: No req.query.token / api_key / access_token reads.
+
+  - id: API-C11
+    title: Scoped, revocable, per-client credentials for third parties
+    mitigates: [API-T12]
+    severity: high
+    level: 1
+    when:
+      consumers: [third_parties]
+    standards:
+      owasp_api_top10: [API2, API5]
+      owasp_top10: [A01]
+      cwe: [CWE-285]
+    guidance: |
+      Issue each integration its own credentials (OAuth client credentials or API keys) with
+      the minimum scopes, store only hashes of API keys, support rotation and revocation, and
+      rate-limit per client.
+    ai_rule: >-
+      Third-party API credentials must be per-client, scoped to minimum permissions, stored
+      hashed, revocable and rate-limited per client.
+    verify:
+      - type: manual
+        description: Each third-party key has scopes and can be revoked without affecting others.
+
+  - id: API-C12
+    title: Authenticate WebSocket connections, check Origin, authorize each message
+    mitigates: [API-T13]
+    severity: high
+    level: 1
+    when:
+      style: [websocket]
+    standards:
+      owasp_top10: [A01]
+      cwe: [CWE-1385]
+    guidance: |
+      Authenticate during the handshake, verify the `Origin` header against an allow-list,
+      validate every message against a schema, and authorize each action — not only the connection.
+    ai_rule: >-
+      WebSocket handshakes must authenticate and check Origin against an allow-list; validate
+      and authorize every incoming message, not only the connection.
+    verify:
+      - type: test
+        description: A handshake with a foreign Origin is refused.

@@ -1,0 +1,66 @@
+# Example manifest: an e-commerce app with web, backend and mobile clients.
+version: 1
+
+app:
+  name: shop-app
+  platforms: [web, backend, android, ios]
+  data_sensitivity: high
+  assurance_level: 2
+
+standards: [asvs, masvs, owasp_top10, owasp_api_top10, owasp_llm_top10, pci_dss, cwe]
+
+ai_assistants: [agents_md, claude, cursor, copilot]
+
+components:
+  - type: auth
+    methods: [email_password, oauth, otp_sms]
+    mfa: optional
+
+  - type: session
+    kind: jwt
+    transport: authorization_header
+
+  - type: web_frontend
+    rendering: spa
+    third_party_scripts: true
+    user_html: false
+
+  - type: api
+    style: [rest]
+    consumers: [own_frontend, own_mobile_app]
+    fetches_user_urls: false
+
+  - type: database
+    engine: postgres
+    kind: sql
+    stores_sensitive_data: true
+
+  - type: file_upload
+    types: [images]
+    storage: object_storage
+    served_to_other_users: true
+
+  - type: payments
+    provider: stripe
+    integration: embedded_fields
+    webhooks: true
+
+  - type: secrets
+    storage: secrets_manager
+    ci_cd: true
+
+  - type: logging
+    destination: log_service
+    regulated_data: true
+
+  - type: mobile_storage
+    data: [auth_tokens, personal_data, offline_cache]
+
+  - type: mobile_platform
+    webviews: false
+    deep_links: true
+    biometrics: true
+
+  - type: ai_feature
+    capabilities: [chat, rag]
+    provider: hosted_api

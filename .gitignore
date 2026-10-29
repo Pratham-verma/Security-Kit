@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+packages/core/assets/
+# website build output and generated pages
+site/dist/
+site/.astro/
+site/public/app/
+site/src/content/docs/docs/controls/
+# licensed reference material (CIS Benchmarks) — never commit or publish
+kit/

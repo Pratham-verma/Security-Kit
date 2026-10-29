@@ -1,0 +1,50 @@
+# Security Kit in CI: fails when the plan is stale or the audit finds high/critical problems,
+# and uploads findings to GitHub code scanning.
+#
+# Copy to .github/workflows/seckit.yml. Actions are pinned to full commit SHAs (control SEC-C7);
+# let Dependabot or Renovate bump them. Note: @seckit/cli is not published to npm yet — until it
+# is, build it from this repository instead of using npx.
+name: Security Kit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  seckit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install Semgrep (code rules)
+        run: pip install semgrep==1.182.1
+
+      - name: Security plan is up to date
+        run: npx --yes @seckit/cli@0.0.1 generate --check
+
+      - name: Audit
+        run: npx --yes @seckit/cli@0.0.1 audit --format sarif --output seckit.sarif --fail-on high
+
+      - name: Upload findings to code scanning
+        if: always() && hashFiles('seckit.sarif') != ''
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: seckit.sarif
+          category: seckit

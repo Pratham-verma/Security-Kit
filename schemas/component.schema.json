@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://securitykit.dev/schemas/component.schema.json",
+  "title": "Security Kit knowledge-base component",
+  "description": "One component type (auth, file_upload, ...): its options, threats, and the controls that mitigate them.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "description",
+    "platforms",
+    "threats",
+    "controls"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "enum": [
+        "app",
+        "cloud"
+      ],
+      "description": "Where the component lives: in the app's code (default) or in its cloud account."
+    },
+    "order": {
+      "type": "integer",
+      "description": "Position in the init wizard and in listings (lower first)."
+    },
+    "question": {
+      "type": "string",
+      "description": "Yes/no question the init wizard asks to find out whether an app has this component."
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/platform"
+      }
+    },
+    "options": {
+      "description": "JSON Schema (object) for the options a manifest may set on this component.",
+      "type": "object"
+    },
+    "threats": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/threat"
+      }
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/control"
+      }
+    }
+  },
+  "$defs": {
+    "platform": {
+      "enum": [
+        "web",
+        "backend",
+        "android",
+        "ios",
+        "cloud"
+      ]
+    },
+    "cwe": {
+      "type": "string",
+      "pattern": "^CWE-[0-9]+$"
+    },
+    "when": {
+      "description": "Control applies only if, for every listed option, the component's value (or any item of an array value) is one of the listed values. An option the manifest leaves unset counts as matching: when unsure, include the control.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": [
+            "string",
+            "boolean",
+            "number"
+          ]
+        }
+      }
+    },
+    "threat": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "stride"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*-T[0-9]+$"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "stride": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "S",
+              "T",
+              "R",
+              "I",
+              "D",
+              "E"
+            ]
+          }
+        },
+        "cwe": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cwe"
+          }
+        },
+        "when": {
+          "$ref": "#/$defs/when"
+        }
+      }
+    },
+    "control": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "mitigates",
+        "severity",
+        "level",
+        "standards",
+        "guidance",
+        "ai_rule",
+        "verify"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*-C[0-9]+$"
+        },
+        "title": {
+          "type": "string"
+        },
+        "mitigates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*-T[0-9]+$"
+          }
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "level": {
+          "description": "Lowest assurance level at which this control is required.",
+          "enum": [
+            1,
+            2,
+            3
+          ]
+        },
+        "platforms": {
+          "description": "Platforms this control applies to. Defaults to the component's platforms.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/platform"
+          }
+        },
+        "when": {
+          "$ref": "#/$defs/when"
+        },
+        "standards": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "asvs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^V[0-9]+\\.[0-9]+\\.[0-9]+$"
+              }
+            },
+            "masvs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^MASVS-[A-Z]+-[0-9]+$"
+              }
+            },
+            "owasp_top10": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^A[0-9]{2}$"
+              }
+            },
+            "owasp_api_top10": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^API[0-9]{1,2}$"
+              }
+            },
+            "owasp_llm_top10": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^LLM[0-9]{2}$"
+              }
+            },
+            "cwe": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/cwe"
+              }
+            },
+            "pci_dss": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9]+(\\.[0-9]+)*$"
+              }
+            },
+            "nist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cis_aws": {
+              "type": "array",
+              "description": "CIS AWS benchmark recommendation numbers (Foundations, Compute, Database, Storage, EUC).",
+              "items": {
+                "type": "string",
+                "pattern": "^(Foundations|Compute|Database|Storage|EUC) [0-9]+(\\.[0-9]+)*$"
+              }
+            }
+          }
+        },
+        "guidance": {
+          "type": "string",
+          "description": "Explanation for developers (Markdown)."
+        },
+        "ai_rule": {
+          "type": "string",
+          "description": "One imperative instruction for AI coding assistants."
+        },
+        "implement": {
+          "description": "How to implement this control: Security Kit SDK helpers (node, web) or platform-native APIs (android, ios).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "node": {
+              "type": "string",
+              "description": "@seckit/node helper"
+            },
+            "web": {
+              "type": "string",
+              "description": "@seckit/web helper"
+            },
+            "android": {
+              "type": "string",
+              "description": "Android platform API or config"
+            },
+            "ios": {
+              "type": "string",
+              "description": "iOS platform API or config"
+            }
+          }
+        },
+        "verify": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "description"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "enum": [
+                  "manual",
+                  "semgrep",
+                  "test",
+                  "config"
+                ]
+              },
+              "description": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string",
+                "description": "Rule ID, test file, or config key, once it exists."
+              }
+            }
+          }
+        },
+        "tests": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Concrete test cases (commands and expected results) that show the control is in place.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

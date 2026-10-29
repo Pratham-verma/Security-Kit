@@ -1,0 +1,54 @@
+rules:
+  - id: seckit.awssto-c1.tf-s3-public-access-block-off
+    message: "S3 public access block setting turned off. Keep all four settings true; serve public files through CloudFront with Origin Access Control."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSSTO-C1]
+      cwe: CWE-284
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              resource "aws_s3_bucket_public_access_block" $N {
+                ...
+              }
+          - pattern-inside: |
+              resource "aws_s3_account_public_access_block" $N {
+                ...
+              }
+      - pattern: $SETTING = false
+      - metavariable-regex:
+          metavariable: $SETTING
+          regex: ^(block_public_acls|block_public_policy|ignore_public_acls|restrict_public_buckets)$
+
+  - id: seckit.awssto-c4.tf-s3-public-acl
+    message: "Public S3 ACL. Disable ACLs (object_ownership = BucketOwnerEnforced) and never grant public read or write."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSSTO-C4, AWSSTO-C1]
+      cwe: CWE-284
+    patterns:
+      - pattern: acl = "$ACL"
+      - metavariable-regex:
+          metavariable: $ACL
+          regex: ^(public-read|public-read-write|authenticated-read)$
+
+  - id: seckit.awssto-c7.tf-efs-unencrypted
+    message: "EFS file system is not encrypted at rest. Set encrypted = true (with a customer-managed kms_key_id for sensitive data)."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSSTO-C7]
+      cwe: CWE-311
+    patterns:
+      - pattern: |
+          resource "aws_efs_file_system" $N {
+            ...
+          }
+      - pattern-not: |
+          resource "aws_efs_file_system" $N {
+            ...
+            encrypted = true
+            ...
+          }

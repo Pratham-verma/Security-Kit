@@ -1,0 +1,188 @@
+id: file_upload
+name: File upload
+description: Users send files (images, documents, archives, ...) that the app stores, processes or serves.
+order: 50
+question: Can users upload files?
+platforms: [web, backend, android, ios]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    types:
+      title: What kinds of files can be uploaded?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [images, documents, archives, video, any]
+    storage:
+      title: Where are uploaded files stored?
+      enum: [local_disk, object_storage]
+    served_to_other_users:
+      title: Can other users view or download the uploaded files?
+      type: boolean
+      default: true
+
+threats:
+  - id: UPLOAD-T1
+    title: Upload of executable or malicious content
+    description: A file disguised by extension or Content-Type is executed by the server or opened by victims.
+    stride: [T, E]
+    cwe: [CWE-434]
+
+  - id: UPLOAD-T2
+    title: Path traversal through the file name
+    stride: [T]
+    cwe: [CWE-22]
+
+  - id: UPLOAD-T3
+    title: Resource exhaustion through huge files or decompression bombs
+    stride: [D]
+    cwe: [CWE-400, CWE-409]
+
+  - id: UPLOAD-T4
+    title: Stored XSS by serving uploads as HTML/SVG from the app origin
+    stride: [T, E]
+    cwe: [CWE-79]
+    when:
+      served_to_other_users: [true]
+
+  - id: UPLOAD-T5
+    title: Malware distribution to other users
+    stride: [T]
+    cwe: [CWE-434]
+    when:
+      served_to_other_users: [true]
+
+controls:
+  - id: UPLOAD-C1
+    title: Validate type by file content against an allow-list
+    mitigates: [UPLOAD-T1]
+    severity: critical
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V12.2.1]
+      owasp_top10: [A04]
+      cwe: [CWE-434]
+    guidance: |
+      Check the magic bytes / parse the file against an allow-list of expected types.
+      Never trust the file extension or the client-supplied Content-Type alone.
+      For images, re-encode them (which also strips metadata and polyglot payloads).
+    ai_rule: >-
+      Validate uploads by file content (magic bytes) against an allow-list of types; never
+      trust the extension or client Content-Type; re-encode images server-side.
+    implement:
+      node: detectFileType() and assertFileType()
+    verify:
+      - type: test
+        description: A PHP/HTML file renamed to .jpg is rejected.
+
+  - id: UPLOAD-C2
+    title: Generate server-side file names; never use the client file name in paths
+    mitigates: [UPLOAD-T2]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V12.3.1]
+      owasp_top10: [A01]
+      cwe: [CWE-22]
+    guidance: |
+      Store files under a random identifier (e.g. UUIDv4). Keep the original name only as
+      metadata, sanitized before display.
+    ai_rule: >-
+      Store uploads under a server-generated random name; never build a filesystem path or
+      object key from the user-supplied file name.
+    implement:
+      node: safeStorageName()
+    verify:
+      - type: semgrep
+        description: No path.join / open() using the uploaded file's original name.
+
+  - id: UPLOAD-C3
+    title: Enforce size limits and guard against decompression bombs
+    mitigates: [UPLOAD-T3]
+    severity: medium
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V12.1.1, V12.1.2]
+      owasp_top10: [A04]
+      cwe: [CWE-400, CWE-409]
+    guidance: |
+      Enforce a maximum request/file size at the proxy and the application. For archives and
+      images, cap decompressed size, file count and pixel dimensions before processing.
+    ai_rule: >-
+      Enforce a maximum upload size at the server, and cap decompressed size, entry count and
+      image dimensions before processing any archive or image.
+    verify:
+      - type: config
+        description: Body-size limit is configured on the upload route.
+      - type: test
+        description: An upload above the limit returns 413.
+
+  - id: UPLOAD-C4
+    title: Store uploads outside the web root with no execute permission
+    mitigates: [UPLOAD-T1]
+    severity: high
+    level: 1
+    platforms: [backend]
+    standards:
+      asvs: [V12.4.1]
+      owasp_top10: [A05]
+      cwe: [CWE-434, CWE-552]
+    guidance: |
+      Use object storage (S3, GCS, ...) with private buckets and short-lived signed URLs, or a
+      directory outside the web root that the web server never executes.
+    ai_rule: >-
+      Store uploads in private object storage or a non-executable directory outside the web
+      root; serve them via short-lived signed URLs or a controlled download handler.
+    verify:
+      - type: manual
+        description: Upload location is not reachable as a static path and buckets are private.
+
+  - id: UPLOAD-C5
+    title: Serve user files safely (separate origin, attachment, nosniff)
+    mitigates: [UPLOAD-T4]
+    severity: high
+    level: 1
+    platforms: [backend, web]
+    when:
+      served_to_other_users: [true]
+    standards:
+      asvs: [V12.5.2]
+      owasp_top10: [A03]
+      cwe: [CWE-79]
+    guidance: |
+      Serve uploads from a separate (sandbox) domain, with `Content-Disposition: attachment`
+      for non-image types, an explicit safe `Content-Type`, `X-Content-Type-Options: nosniff`
+      and a restrictive CSP. Do not serve user-uploaded SVG or HTML inline from the app origin.
+    ai_rule: >-
+      Serve user uploads from a separate domain with Content-Disposition: attachment (except
+      safe images), explicit Content-Type and X-Content-Type-Options: nosniff; never inline
+      user SVG/HTML on the app origin.
+    verify:
+      - type: test
+        description: Download responses include nosniff and attachment headers.
+
+  - id: UPLOAD-C6
+    title: Scan uploaded files for malware
+    mitigates: [UPLOAD-T5]
+    severity: medium
+    level: 2
+    platforms: [backend]
+    when:
+      served_to_other_users: [true]
+    standards:
+      asvs: [V12.4.2]
+      cwe: [CWE-434]
+    guidance: |
+      Scan files (e.g. ClamAV or a cloud scanning service) before making them available to
+      other users; quarantine until the scan passes.
+    ai_rule: >-
+      Quarantine uploads and make them available to other users only after a malware scan passes.
+    verify:
+      - type: manual
+        description: The upload pipeline has a scan step before files are published.

@@ -1,0 +1,138 @@
+id: aws_end_user
+name: AWS end-user computing
+description: Virtual desktops and streamed apps for staff or customers — Amazon WorkSpaces and AppStream 2.0.
+category: cloud
+order: 240
+question: Does the team or app use Amazon WorkSpaces or AppStream 2.0?
+platforms: [cloud]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    services:
+      title: Which AWS end-user computing services are used?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [workspaces, appstream]
+
+threats:
+  - id: AWSEUC-T1
+    title: Desktops reached with stolen passwords
+    stride: [S]
+    cwe: [CWE-308]
+  - id: AWSEUC-T2
+    title: Data on desktop volumes read without authorization
+    stride: [I]
+    cwe: [CWE-311]
+    when:
+      services: [workspaces]
+  - id: AWSEUC-T3
+    title: Data copied out of streaming sessions or desktops
+    stride: [I]
+    cwe: [CWE-200]
+  - id: AWSEUC-T4
+    title: Unattended sessions used by someone else
+    stride: [S]
+    cwe: [CWE-613]
+  - id: AWSEUC-T5
+    title: Desktop activity not recorded
+    stride: [R]
+    cwe: [CWE-778]
+
+controls:
+  - id: AWSEUC-C1
+    title: MFA and restricted access to desktops
+    mitigates: [AWSEUC-T1]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [EUC 2.2, EUC 2.3, EUC 2.5, EUC 5.1]
+      owasp_top10: [A07]
+      cwe: [CWE-308]
+    guidance: |
+      Require MFA for WorkSpaces (through the directory's RADIUS or IAM Identity Center) and SAML with MFA for
+      AppStream. Limit access to trusted networks with IP access control groups, disable web-browser access when
+      it is not needed, and allow only managed client devices.
+    ai_rule: WorkSpaces directories must require MFA and IP access control groups; AppStream must use SAML federation with MFA.
+    verify:
+      - type: manual
+        description: MFA on, IP groups attached, web access off unless needed.
+    tests:
+      - "`aws workspaces describe-workspace-directories --query 'Directories[].[DirectoryId,ipGroupIds,WorkspaceAccessProperties.DeviceTypeWeb]'` — IP groups attached, `DeviceTypeWeb: DENY` unless needed."
+      - "`aws ds describe-directories --query 'DirectoryDescriptions[].RadiusSettings'` shows RADIUS (MFA) configured, or users sign in through IAM Identity Center with MFA."
+
+  - id: AWSEUC-C2
+    title: Encrypt WorkSpaces volumes
+    mitigates: [AWSEUC-T2]
+    severity: high
+    level: 1
+    when:
+      services: [workspaces]
+    standards:
+      cis_aws: [EUC 2.4]
+      cwe: [CWE-311]
+    guidance: Create WorkSpaces with root and user volume encryption using a KMS key; encryption cannot be added to an existing WorkSpace.
+    ai_rule: WorkSpaces must set root_volume_encryption_enabled and user_volume_encryption_enabled with a KMS key.
+    verify:
+      - type: manual
+        description: Every WorkSpace has both volumes encrypted.
+    tests:
+      - "`aws workspaces describe-workspaces --query 'Workspaces[].[WorkspaceId,RootVolumeEncryptionEnabled,UserVolumeEncryptionEnabled]'` shows `true`, `true` for every WorkSpace."
+
+  - id: AWSEUC-C3
+    title: Keep data inside the session
+    mitigates: [AWSEUC-T3]
+    severity: medium
+    level: 2
+    standards:
+      cis_aws: [EUC 2.6, EUC 5.2, EUC 5.6]
+      cwe: [CWE-200]
+    guidance: |
+      Turn off clipboard, file transfer, printing and local drive redirection where the data is sensitive, give
+      fleets internet access only through the VPC (NAT and filtering) rather than default internet access, and
+      run them in private subnets.
+    ai_rule: AppStream fleets must disable default internet access and restrict clipboard, file transfer and printing for sensitive data.
+    verify:
+      - type: manual
+        description: Session data controls and network settings reviewed.
+    tests:
+      - "`aws appstream describe-fleets --query 'Fleets[].[Name,EnableDefaultInternetAccess]'` shows `false`."
+      - "`aws appstream describe-stacks --query 'Stacks[].[Name,UserSettings]'` — clipboard, file upload/download and printing are `DISABLED` where data is sensitive."
+
+  - id: AWSEUC-C4
+    title: Session timeouts and limits
+    mitigates: [AWSEUC-T4]
+    severity: medium
+    level: 1
+    standards:
+      cis_aws: [EUC 2.7, EUC 5.3, EUC 5.4, EUC 5.5]
+      cwe: [CWE-613]
+    guidance: Set a maximum session duration (for example 10 hours or less), a short disconnect timeout (5 minutes or less) and an idle disconnect timeout (15 minutes or less); use AutoStop for WorkSpaces that do not need to run all the time.
+    ai_rule: AppStream fleets must set max_user_duration, disconnect_timeout and idle_disconnect_timeout to short values.
+    verify:
+      - type: manual
+        description: Timeouts set within limits.
+    tests:
+      - "`aws appstream describe-fleets --query 'Fleets[].[Name,MaxUserDurationInSeconds,DisconnectTimeoutInSeconds,IdleDisconnectTimeoutInSeconds]'` — at most 36000, 300 and 900."
+      - "`aws workspaces describe-workspaces --query 'Workspaces[].[WorkspaceId,WorkspaceProperties.RunningMode]'` shows `AUTO_STOP` where possible."
+
+  - id: AWSEUC-C5
+    title: Log desktop sign-ins and activity
+    mitigates: [AWSEUC-T5]
+    severity: medium
+    level: 1
+    standards:
+      cis_aws: [EUC 3.1, EUC 3.2]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: Send WorkSpaces access events (EventBridge) and AppStream usage reports to CloudWatch or S3, and make sure CloudTrail records API activity for these services.
+    ai_rule: Keep WorkSpaces and AppStream access logging and usage reports enabled.
+    verify:
+      - type: manual
+        description: Access events and usage reports are collected.
+    tests:
+      - "`aws events list-rules --query \"Rules[?contains(EventPattern, 'aws.workspaces')]\"` shows a rule for WorkSpaces access events."
+      - "`aws appstream describe-usage-report-subscriptions` returns an active subscription."

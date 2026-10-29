@@ -1,0 +1,136 @@
+rules:
+  - id: seckit.awsdb-c1.tf-db-publicly-accessible
+    message: "Database is publicly accessible. Set publicly_accessible = false and reach it only from the app's security group."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSDB-C1]
+      cwe: CWE-284
+    pattern-either:
+      - pattern: |
+          resource "aws_db_instance" $N {
+            ...
+            publicly_accessible = true
+            ...
+          }
+      - pattern: |
+          resource "aws_rds_cluster_instance" $N {
+            ...
+            publicly_accessible = true
+            ...
+          }
+
+  - id: seckit.awsdb-c2.tf-db-unencrypted
+    message: "Database storage is not encrypted. Set storage_encrypted = true (encryption cannot be turned on later)."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSDB-C2]
+      cwe: CWE-311
+    patterns:
+      - pattern-either:
+          - pattern: |
+              resource "aws_db_instance" $N {
+                ...
+              }
+          - pattern: |
+              resource "aws_rds_cluster" $N {
+                ...
+              }
+          - pattern: |
+              resource "aws_docdb_cluster" $N {
+                ...
+              }
+          - pattern: |
+              resource "aws_neptune_cluster" $N {
+                ...
+              }
+      - pattern-not: |
+          resource $T $N {
+            ...
+            storage_encrypted = true
+            ...
+          }
+      - pattern-not: |
+          resource $T $N {
+            ...
+            replicate_source_db = $SRC
+            ...
+          }
+
+  - id: seckit.awsdb-c2.tf-cache-unencrypted
+    message: "ElastiCache replication group without encryption at rest or in transit. Set at_rest_encryption_enabled = true and transit_encryption_enabled = true."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSDB-C2, AWSDB-C3]
+      cwe: CWE-311
+    patterns:
+      - pattern: |
+          resource "aws_elasticache_replication_group" $N {
+            ...
+          }
+      - pattern-not: |
+          resource "aws_elasticache_replication_group" $N {
+            ...
+            at_rest_encryption_enabled = true
+            ...
+            transit_encryption_enabled = true
+            ...
+          }
+      - pattern-not: |
+          resource "aws_elasticache_replication_group" $N {
+            ...
+            transit_encryption_enabled = true
+            ...
+            at_rest_encryption_enabled = true
+            ...
+          }
+
+  - id: seckit.awsdb-c4.tf-db-literal-password
+    message: "Database password written in the infrastructure code. Use manage_master_user_password = true (Secrets Manager) or IAM authentication."
+    severity: ERROR
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSDB-C4, SEC-C1]
+      cwe: CWE-798
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              resource "aws_db_instance" $N {
+                ...
+              }
+          - pattern-inside: |
+              resource "aws_rds_cluster" $N {
+                ...
+              }
+          - pattern-inside: |
+              resource "aws_docdb_cluster" $N {
+                ...
+              }
+      - pattern-either:
+          - pattern: password = "..."
+          - pattern: master_password = "..."
+
+  - id: seckit.awsdb-c5.tf-dynamodb-no-pitr
+    message: "DynamoDB table without point-in-time recovery. Add point_in_time_recovery { enabled = true }."
+    severity: WARNING
+    languages: [terraform]
+    metadata:
+      seckit-controls: [AWSDB-C5]
+      cwe: CWE-1188
+    patterns:
+      - pattern: |
+          resource "aws_dynamodb_table" $N {
+            ...
+          }
+      - pattern-not: |
+          resource "aws_dynamodb_table" $N {
+            ...
+            point_in_time_recovery {
+              ...
+              enabled = true
+              ...
+            }
+            ...
+          }

@@ -1,0 +1,192 @@
+rules:
+  - id: seckit.web-c1.dynamic-html-sink
+    message: "Dynamic data written to an HTML sink enables XSS. Use text APIs (textContent) or sanitize with DOMPurify."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [WEB-C1, AI-C2]
+      cwe: CWE-79
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.outerHTML = $X
+          - pattern: $EL.insertAdjacentHTML($POS, $X)
+          - pattern: document.write($X)
+          - pattern: document.writeln($X)
+          - pattern: "{__html: $X}"
+      - pattern-not: $EL.innerHTML = "..."
+      - pattern-not: $EL.outerHTML = "..."
+      - pattern-not: $EL.insertAdjacentHTML($POS, "...")
+      - pattern-not: document.write("...")
+      - pattern-not: '{__html: "..."}'
+      - pattern-not: $EL.innerHTML = DOMPurify.sanitize(...)
+      - pattern-not: $EL.innerHTML = $P.sanitize(...)
+      - pattern-not: "{__html: DOMPurify.sanitize(...)}"
+      - pattern-not: "{__html: $P.sanitize(...)}"
+      - pattern-not: $EL.insertAdjacentHTML($POS, DOMPurify.sanitize(...))
+      - pattern-not: $EL.innerHTML = sanitizeHtml(...)
+      - pattern-not: "{__html: sanitizeHtml(...)}"
+
+  - id: seckit.web-c1.eval
+    message: "eval / new Function / string timers execute code from strings. Remove them."
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [WEB-C1]
+      cwe: CWE-95
+    patterns:
+      - pattern-either:
+          - pattern: eval($X)
+          - pattern: new Function(...)
+          - pattern: setTimeout("...", ...)
+          - pattern: setInterval("...", ...)
+      - pattern-not: eval("...")
+
+  - id: seckit.web-c6.open-redirect
+    message: "Redirect target taken from the request. Allow only relative paths or an allow-list (safeRedirectPath() in @seckit/node)."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [WEB-C6]
+      cwe: CWE-601
+    patterns:
+      - pattern-either:
+          - pattern: $RES.redirect(req.$S.$P)
+          - pattern: $RES.redirect($CODE, req.$S.$P)
+          - pattern: $RES.redirect(req.$S[$P])
+      - metavariable-regex:
+          metavariable: $S
+          regex: ^(query|body|params)$
+
+  - id: seckit.web-c4.insecure-http-url
+    message: "Plain http:// URL for a resource or API. Use https:// (localhost is fine for development)."
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      seckit-controls: [WEB-C4]
+      cwe: CWE-319
+    patterns:
+      - pattern-either:
+          - pattern: fetch("$URL", ...)
+          - pattern: axios.$M("$URL", ...)
+          - pattern: new WebSocket("$URL", ...)
+          - pattern: new EventSource("$URL", ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ^(http|ws)://(?!(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$))
+
+  - id: seckit.web-c1.python-unsafe-markup
+    message: "Dynamic content marked as safe HTML bypasses auto-escaping (XSS). Escape it, or sanitize with nh3/bleach first."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [WEB-C1, AI-C2]
+      cwe: CWE-79
+    patterns:
+      - pattern-either:
+          - pattern: mark_safe($X)
+          - pattern: Markup($X)
+          - pattern: markupsafe.Markup($X)
+      - pattern-not: mark_safe("...")
+      - pattern-not: Markup("...")
+      - pattern-not: markupsafe.Markup("...")
+
+  - id: seckit.web-c1.python-template-from-string
+    message: "Template compiled from a dynamic string (server-side template injection, often RCE). Use template files with variables."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [WEB-C1]
+      cwe: CWE-1336
+    patterns:
+      - pattern-either:
+          - pattern: render_template_string($X, ...)
+          - pattern: $ENV.from_string($X, ...)
+      - pattern-not: render_template_string("...", ...)
+      - pattern-not: $ENV.from_string("...", ...)
+
+  - id: seckit.web-c6.python-open-redirect
+    message: "Redirect target taken from the request. Allow only relative paths or an allow-list (Django: url_has_allowed_host_and_scheme)."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      seckit-controls: [WEB-C6]
+      cwe: CWE-601
+    patterns:
+      - pattern-either:
+          - pattern: $R(request.args.get(...), ...)
+          - pattern: $R(request.args[...], ...)
+          - pattern: $R(request.GET.get(...), ...)
+          - pattern: $R(request.GET[...], ...)
+          - pattern: $R(request.query_params.get(...), ...)
+      - metavariable-regex:
+          metavariable: $R
+          regex: ^(redirect|HttpResponseRedirect|RedirectResponse)$
+
+  - id: seckit.web-c4.python-tls-verification-disabled
+    message: "TLS certificate verification disabled (man-in-the-middle). Remove verify=False / unverified contexts."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      seckit-controls: [WEB-C4, DB-C5]
+      cwe: CWE-295
+    pattern-either:
+      - pattern: requests.$M(..., verify=False, ...)
+      - pattern: httpx.$M(..., verify=False, ...)
+      - pattern: $S.verify = False
+      - pattern: ssl._create_unverified_context(...)
+
+  - id: seckit.web-c6.spring-open-redirect
+    message: "Redirect target taken from the request. Allow only relative paths or an allow-list of hosts."
+    severity: WARNING
+    languages: [java]
+    metadata:
+      seckit-controls: [WEB-C6]
+      cwe: CWE-601
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: '$RET $M(..., @RequestParam(...) $T $P, ...) { ... }'
+              - pattern: '$RET $M(..., @RequestParam $T $P, ...) { ... }'
+          - focus-metavariable: $P
+      - pattern: (HttpServletRequest $REQ).getParameter(...)
+      - pattern: (HttpServletRequest $REQ).getHeader("Referer")
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RESP.sendRedirect($U)
+              - pattern: new RedirectView($U, ...)
+              - pattern: new ModelAndView("redirect:" + $U)
+              - pattern: return "redirect:" + $U;
+              - pattern: ResponseEntity.status(...).location(URI.create($U))
+          - focus-metavariable: $U
+
+  - id: seckit.web-c1.server-template-unescaped
+    message: "Unescaped template output (th:utext, escapeXml=\"false\"). Use th:text / escaped output, or sanitize the HTML first."
+    severity: ERROR
+    languages: [regex]
+    paths:
+      include: ["*.html", "*.jsp", "*.jspx", "*.tag"]
+    metadata:
+      seckit-controls: [WEB-C1]
+      cwe: CWE-79
+    pattern-regex: |-
+      \bth:utext\s*=|\bescapeXml\s*=\s*["']false["']
+
+  - id: seckit.web-c4.java-tls-verification-disabled
+    message: "TLS certificate or host name verification disabled (man-in-the-middle). Use the default trust store and verifier."
+    severity: ERROR
+    languages: [java, kotlin]
+    metadata:
+      seckit-controls: [WEB-C4, DB-C5, MPLAT-C2]
+      cwe: CWE-295
+    pattern-either:
+      - pattern: InsecureTrustManagerFactory.INSTANCE
+      - pattern: NoopHostnameVerifier.INSTANCE
+      - pattern: new NoopHostnameVerifier()
+      - pattern: TrustAllStrategy.INSTANCE
+      - pattern: new TrustAllStrategy()
+      - pattern: new TrustSelfSignedStrategy()
+      - pattern: TrustSelfSignedStrategy()
+      - pattern: NoopHostnameVerifier()

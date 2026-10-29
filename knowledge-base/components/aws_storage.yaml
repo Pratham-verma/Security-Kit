@@ -1,0 +1,258 @@
+id: aws_storage
+name: AWS storage and backups
+description: Where the app keeps files on AWS — S3, EBS, EFS, FSx — and how they are backed up and recovered.
+category: cloud
+order: 220
+question: Does the app store files or backups on AWS (S3, EBS, EFS, FSx, AWS Backup)?
+platforms: [cloud]
+
+options:
+  type: object
+  additionalProperties: false
+  properties:
+    services:
+      title: Which AWS storage services does the app use?
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        enum: [s3, ebs, efs, fsx, backup]
+    public_content:
+      title: Does any bucket deliberately serve public content (a website or public downloads)?
+      type: boolean
+
+threats:
+  - id: AWSSTO-T1
+    title: Buckets or objects readable by anyone on the internet
+    stride: [I]
+    cwe: [CWE-200, CWE-284]
+    when:
+      services: [s3]
+  - id: AWSSTO-T2
+    title: Data read in transit or at rest by the wrong party
+    stride: [I]
+    cwe: [CWE-311, CWE-319]
+  - id: AWSSTO-T3
+    title: Data deleted or encrypted by an attacker (ransomware) with no way back
+    stride: [T, D]
+    cwe: [CWE-1188]
+  - id: AWSSTO-T4
+    title: File systems mounted by hosts that should not reach them
+    stride: [I, E]
+    cwe: [CWE-284]
+    when:
+      services: [efs, fsx]
+  - id: AWSSTO-T5
+    title: Access to sensitive objects is not recorded
+    stride: [R]
+    cwe: [CWE-778]
+    when:
+      services: [s3]
+
+controls:
+  - id: AWSSTO-C1
+    title: S3 Block Public Access on (account and buckets)
+    mitigates: [AWSSTO-T1]
+    severity: critical
+    level: 1
+    when:
+      services: [s3]
+    standards:
+      cis_aws: [Foundations 3.1.4, Compute 5.9]
+      owasp_top10: [A01, A05]
+      cwe: [CWE-284]
+    guidance: |
+      Turn on all four Block Public Access settings at the account level and on every bucket. Serve public
+      content through CloudFront with Origin Access Control instead of a public bucket; if a bucket must be
+      public, keep it separate and hold nothing else in it.
+    ai_rule: >-
+      Every S3 bucket must have a public access block with all four settings true; serve public files through
+      CloudFront with Origin Access Control, never with public-read ACLs or bucket policies.
+    verify:
+      - type: semgrep
+        description: IaC does not disable public access blocks or use public ACLs.
+    tests:
+      - "`aws s3control get-public-access-block --account-id <account-id>` shows all four settings `true`."
+      - "For each bucket from `aws s3api list-buckets`, `aws s3api get-public-access-block --bucket <b>` shows all four settings `true` (except a documented public-content bucket)."
+      - "`aws s3api get-bucket-policy-status --bucket <b>` returns `IsPublic: false`."
+
+  - id: AWSSTO-C2
+    title: S3 accepts only HTTPS requests
+    mitigates: [AWSSTO-T2]
+    severity: high
+    level: 1
+    when:
+      services: [s3]
+    standards:
+      cis_aws: [Foundations 3.1.1]
+      owasp_top10: [A02]
+      cwe: [CWE-319]
+    guidance: Add a bucket policy statement that denies every request where `aws:SecureTransport` is `false` (and optionally requires TLS 1.2+ with `s3:TlsVersion`).
+    ai_rule: Every S3 bucket policy must deny requests with aws:SecureTransport = false.
+    verify:
+      - type: manual
+        description: Each bucket policy has a Deny on aws:SecureTransport false.
+    tests:
+      - "`aws s3api get-bucket-policy --bucket <b> --query Policy --output text` contains a `Deny` statement with condition `\"Bool\": {\"aws:SecureTransport\": \"false\"}`."
+      - "`curl -s -o /dev/null -w '%{http_code}' http://<b>.s3.<region>.amazonaws.com/<object>` returns 403."
+
+  - id: AWSSTO-C3
+    title: Encrypt S3 data, with KMS keys for sensitive data
+    mitigates: [AWSSTO-T2]
+    severity: high
+    level: 1
+    when:
+      services: [s3]
+    standards:
+      cis_aws: [Foundations 3.1.3]
+      owasp_top10: [A02]
+      cwe: [CWE-311]
+    guidance: |
+      S3 encrypts new objects with SSE-S3 by default; for sensitive data use SSE-KMS with a customer-managed
+      key and S3 Bucket Keys, so access also requires KMS permission. Classify data (Amazon Macie helps) so you
+      know which buckets hold what.
+    ai_rule: Buckets holding personal or sensitive data must use SSE-KMS with a customer-managed key (server_side_encryption_configuration with aws:kms).
+    verify:
+      - type: manual
+        description: Sensitive buckets use SSE-KMS; data is classified.
+    tests:
+      - "`aws s3api get-bucket-encryption --bucket <b>` shows `aws:kms` (with `BucketKeyEnabled: true`) for buckets that hold sensitive data."
+      - "`aws macie2 get-macie-session` shows Macie enabled, or data classification is documented another way."
+
+  - id: AWSSTO-C4
+    title: Owner-enforced buckets — no ACLs
+    mitigates: [AWSSTO-T1]
+    severity: medium
+    level: 1
+    when:
+      services: [s3]
+    standards:
+      cis_aws: [Foundations 3.1.4]
+      cwe: [CWE-284]
+    guidance: Set Object Ownership to "Bucket owner enforced" so ACLs are disabled and all access is controlled by IAM and bucket policies.
+    ai_rule: Set S3 object ownership to BucketOwnerEnforced and never use object or bucket ACLs.
+    verify:
+      - type: semgrep
+        description: IaC does not use public S3 ACLs.
+    tests:
+      - "`aws s3api get-bucket-ownership-controls --bucket <b>` shows `ObjectOwnership: BucketOwnerEnforced`."
+
+  - id: AWSSTO-C5
+    title: Versioning, MFA Delete or Object Lock for important buckets
+    mitigates: [AWSSTO-T3]
+    severity: medium
+    level: 2
+    when:
+      services: [s3]
+    standards:
+      cis_aws: [Foundations 3.1.2]
+      cwe: [CWE-1188]
+    guidance: Enable versioning on buckets holding data you cannot lose, protect deletes with MFA Delete or S3 Object Lock (for backups and logs), and add lifecycle rules for old versions.
+    ai_rule: Buckets for user data, backups or logs must enable versioning (and Object Lock for backups and audit logs).
+    verify:
+      - type: manual
+        description: Important buckets have versioning and delete protection.
+    tests:
+      - "`aws s3api get-bucket-versioning --bucket <b>` shows `Status: Enabled` (and `MFADelete: Enabled` where required)."
+      - "`aws s3api get-object-lock-configuration --bucket <backup-or-log-bucket>` shows Object Lock enabled."
+
+  - id: AWSSTO-C6
+    title: Log access to sensitive buckets
+    mitigates: [AWSSTO-T5]
+    severity: medium
+    level: 2
+    when:
+      services: [s3]
+    standards:
+      cis_aws: [Foundations 4.8, Foundations 4.9, Compute 5.10]
+      owasp_top10: [A09]
+      cwe: [CWE-778]
+    guidance: Record object-level read and write events for buckets with sensitive data (CloudTrail data events), and turn on server access logging where needed.
+    ai_rule: Buckets with sensitive data must have CloudTrail data events or server access logging enabled.
+    verify:
+      - type: manual
+        description: Data events or access logs cover sensitive buckets.
+    tests:
+      - "`aws cloudtrail get-event-selectors --trail-name <trail>` includes S3 data events (read and write) for the sensitive buckets (or all buckets)."
+      - "`aws s3api get-bucket-logging --bucket <b>` returns a logging target for buckets that need access logs."
+
+  - id: AWSSTO-C7
+    title: Encrypt EFS and FSx file systems, at rest and in transit
+    mitigates: [AWSSTO-T2]
+    severity: high
+    level: 1
+    when:
+      services: [efs, fsx]
+    standards:
+      cis_aws: [Foundations 3.3.1, Storage 3.2, Storage 3.6]
+      owasp_top10: [A02]
+      cwe: [CWE-311, CWE-319]
+    guidance: Create file systems with encryption at rest (a customer-managed key for sensitive data), mount EFS with TLS (`-o tls`), and add a file system policy that denies non-TLS access.
+    ai_rule: EFS and FSx file systems must set encrypted = true, and EFS file system policies must deny access without aws:SecureTransport.
+    verify:
+      - type: semgrep
+        description: IaC EFS file systems are encrypted.
+    tests:
+      - "`aws efs describe-file-systems --query 'FileSystems[].[FileSystemId,Encrypted]'` shows `true` for every file system."
+      - "`aws efs describe-file-system-policy --file-system-id <id>` contains a `Deny` with `aws:SecureTransport: false`."
+      - "`aws fsx describe-file-systems --query 'FileSystems[].[FileSystemId,KmsKeyId]'` shows a KMS key for every file system."
+
+  - id: AWSSTO-C8
+    title: File systems reachable only from the hosts that need them
+    mitigates: [AWSSTO-T4]
+    severity: high
+    level: 1
+    when:
+      services: [efs, fsx]
+    standards:
+      cis_aws: [Foundations 6.1.2, Storage 3.3, Storage 3.4, Storage 3.5, Storage 3.7, Storage 3.8, Storage 3.9, Storage 3.10, Storage 3.11]
+      cwe: [CWE-284]
+    guidance: |
+      Mount targets live in private subnets, with security groups allowing NFS (2049) or SMB only from the
+      application's security group. Use EFS access points with IAM authorization so each app sees only its
+      directory, and never open file-system ports to wide CIDRs.
+    ai_rule: EFS mount target and FSx security groups may allow NFS/SMB only from the app's security group, never from a CIDR such as 0.0.0.0/0.
+    verify:
+      - type: manual
+        description: Mount target security groups reference only app security groups; access points enforce IAM.
+    tests:
+      - "`aws efs describe-mount-targets --file-system-id <id>` then `aws efs describe-mount-target-security-groups --mount-target-id <mt>` — the groups allow 2049 only from application security groups."
+      - "`aws efs describe-access-points --file-system-id <id>` shows access points with a root directory and POSIX user per application."
+
+  - id: AWSSTO-C9
+    title: Backups that ransomware cannot delete, and tested restores
+    mitigates: [AWSSTO-T3]
+    severity: high
+    level: 1
+    standards:
+      cis_aws: [Storage 1.2, Storage 1.3, Storage 1.4, Storage 1.5, Storage 1.6, Storage 2.5]
+      cwe: [CWE-1188]
+    guidance: |
+      Use AWS Backup plans for every data store, keep copies in a separate account or region, lock the vault
+      (Vault Lock) so backups cannot be deleted early, give AWS Backup its own least-privilege role, and test a
+      restore on a schedule.
+    ai_rule: Every data store in infrastructure code must be covered by an AWS Backup plan with a locked vault.
+    verify:
+      - type: manual
+        description: Backup plans cover all data stores; vault lock on; a restore test is recorded.
+    tests:
+      - "`aws backup list-protected-resources --query 'Results[].[ResourceType,ResourceArn]'` includes every database, file system and volume that holds data."
+      - "`aws backup describe-backup-vault --backup-vault-name <v>` shows `Locked: true`."
+      - "`aws backup list-restore-jobs --by-status COMPLETED` shows a restore test within your agreed interval."
+
+  - id: AWSSTO-C10
+    title: Disaster recovery is configured and drilled
+    mitigates: [AWSSTO-T3]
+    severity: medium
+    level: 3
+    standards:
+      cis_aws: [Storage 6.1, Storage 6.2, Storage 6.4, Storage 6.5, Storage 6.7, Storage 6.8, Storage 6.9, Storage 6.10, Storage 6.11, Storage 6.12]
+      cwe: [CWE-1188]
+    guidance: For critical systems, replicate to another region or account (for example AWS Elastic Disaster Recovery), keep launch settings ready, and run a failover and failback drill on a schedule.
+    ai_rule: Do not remove cross-region replication or disaster-recovery configuration from infrastructure code.
+    verify:
+      - type: manual
+        description: DR replication is healthy and a drill is recorded.
+    tests:
+      - "`aws drs describe-source-servers --query 'items[].[sourceServerID,dataReplicationInfo.dataReplicationState]'` shows `CONTINUOUS` for protected servers (if you use Elastic Disaster Recovery)."
+      - "`aws drs describe-recovery-instances` or your runbook shows a recovery drill in the last 6 months."

@@ -123,6 +123,8 @@ function shortPath(dir: string): string {
   return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : dir;
 }
 
+let navCurrent = '';
+
 function renderNav(current: string): void {
   const s = store.state;
   const failed = s?.lastAudit?.controls.filter((c) => c.status === 'fail').length ?? 0;
@@ -141,6 +143,14 @@ function renderNav(current: string): void {
       return heading ? [heading, link] : [link];
     }),
   );
+  // On narrow screens the nav is a horizontal strip; keep the current page in view when the route changes.
+  const active = nav.querySelector<HTMLElement>('.nav-item.active');
+  if (current !== navCurrent && active && nav.scrollWidth > nav.clientWidth) {
+    const a = active.getBoundingClientRect();
+    const n = nav.getBoundingClientRect();
+    nav.scrollLeft += a.left - n.left - (n.width - a.width) / 2;
+  }
+  navCurrent = current;
   project.replaceChildren(
     ...(s && (!hosted() || s.manifest)
       ? [h('span', { class: 'project-label' }, icon('folder'), 'Project'), h('strong', { class: 'project-name' }, s.project.name), ...(s.project.dir ? [h('span', { class: 'project-dir', title: s.project.dir }, shortPath(s.project.dir))] : [])]

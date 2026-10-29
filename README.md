@@ -15,6 +15,25 @@ GitHub Copilot, Gemini CLI, Codex) to check, fix or test your code.
 > **Status: v0.1.0, pre-release.** The website and npm packages are being prepared. Until they are published,
 > run it from source (below) or with Docker.
 
+## Screenshots
+
+![Security Kit landing page](.github/screenshots/landing-desktop.png)
+
+| The app | Describe your app |
+|---|---|
+| ![Security Kit app home](.github/screenshots/app-home-desktop.png) | ![Describe your app form](.github/screenshots/app-describe-desktop.png) |
+
+**On phones and tablets**
+
+<p>
+  <img src=".github/screenshots/landing-phone.png" alt="Landing page on a phone" width="190" />
+  <img src=".github/screenshots/app-home-phone.png" alt="App home on a phone" width="190" />
+  <img src=".github/screenshots/app-describe-phone.png" alt="Describe your app on a phone" width="190" />
+  <img src=".github/screenshots/docs-phone.png" alt="Documentation on a phone" width="190" />
+</p>
+
+<img src=".github/screenshots/app-describe-tablet.png" alt="Describe your app on a tablet" width="480" />
+
 ## Quick start
 
 ### In the browser

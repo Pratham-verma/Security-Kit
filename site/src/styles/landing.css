@@ -75,8 +75,8 @@ main > section { padding: clamp(32px, 5vw, 60px) clamp(16px, 5vw, 56px); max-wid
 .footer nav { display: flex; gap: 18px; }
 .footer a { color: var(--text-2); text-decoration: none; }
 @media (max-width: 560px) {
-  .topbar nav a:not(.btn):nth-child(2) { display: none; }
-  .topbar { padding: 12px 16px; }
+  .topbar { flex-wrap: wrap; row-gap: 10px; padding: 12px 16px; }
+  .topbar nav { width: 100%; justify-content: space-between; gap: 8px; }
   .brand { font-size: 1rem; gap: 8px; }
   .btn-sm { padding: 0 12px; }
 }

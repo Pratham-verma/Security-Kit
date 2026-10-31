@@ -94,8 +94,14 @@ function schedulePreview(rerender: () => void): void {
   }, 300);
 }
 
-function scrollToForm(): void {
-  requestAnimationFrame(() => document.getElementById('describe-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+function scrollToId(id: string): void {
+  requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+const scrollToForm = () => scrollToId('describe-form');
+
+/** On the website: which way the user chose to describe the app (answers already saved → the questions). */
+function currentMode(): StartMode {
+  return startMode ?? (store.state!.manifest ? 'manual' : 'files');
 }
 
 /** Start the form from what detection found, keeping a name the user already typed. */
@@ -127,8 +133,8 @@ async function useProject(btn: HTMLButtonElement, rerender: () => void, pick: ()
     detection = await api.post<Detection>('/api/detect', { files: picked.files, folder: picked.folder });
     if (applyDetection(rerender)) {
       filledFrom = 'project';
-      toast(`Found ${plural(detection.detection.components.length, 'part')} of your app in ${plural(picked.read, 'file')}. Check the answers below.`);
-      scrollToForm();
+      toast(`Found ${plural(detection.detection.components.length, 'part')} of your app in ${plural(picked.read, 'file')}.`);
+      scrollToId('describe-result');
     } else {
       toast('Nothing recognisable in that project. Describe it in your own words, or answer the questions instead.', 'info');
     }
@@ -145,8 +151,8 @@ async function useDescription(btn: HTMLButtonElement, rerender: () => void): Pro
     detection = await api.post<Detection>('/api/detect-text', { text: describeText });
     if (applyDetection(rerender)) {
       filledFrom = 'text';
-      toast(`Found ${plural(detection.detection.components.length, 'part')} of your app in your description. Check the answers below.`);
-      scrollToForm();
+      toast(`Found ${plural(detection.detection.components.length, 'part')} of your app in your description.`);
+      scrollToId('describe-result');
     } else {
       toast('Could not tell enough from that. Mention how people sign in, what data you store, payments, uploads or AI — or answer the questions.', 'info');
     }
@@ -328,7 +334,7 @@ const EXAMPLE_DESCRIPTION =
   'e.g. A React web app with a Node.js API and PostgreSQL. Users sign up with email and password or Google. They pay for subscriptions with Stripe and can upload profile photos to S3. There is an AI chatbot that uses OpenAI. It runs on AWS Lambda.';
 
 function startPanel(rerender: () => void): HTMLElement {
-  const mode: StartMode = startMode ?? (store.state!.manifest ? 'manual' : 'files');
+  const mode = currentMode();
   const choose = (v: StartMode) => {
     startMode = v;
     rerender();
@@ -378,14 +384,20 @@ function startPanel(rerender: () => void): HTMLElement {
     panel = h(
       'div',
       { class: 'start-panel' },
-      h('p', null, 'Answer the questions below. Choose “Not sure” when in doubt — the plan then includes every control that could apply.'),
-      h('div', { class: 'start-actions' }, button('Go to the questions', { kind: 'secondary', icon: 'chevron', onClick: scrollToForm })),
+      h('p', null, 'Answer the questions below, then press ', h('strong', null, 'Save and continue'), '. Not sure about something? Choose “Not sure” — your plan then includes every check that could apply, so nothing is missed.'),
     );
   }
   return h(
     'section',
     { class: 'start' },
-    h('h2', null, 'How do you want to describe your app?'),
+    h(
+      'ol',
+      { class: 'how-steps' },
+      h('li', null, h('strong', null, 'Tell us about your app'), h('span', null, 'Pick one of the three ways below.')),
+      h('li', null, h('strong', null, 'Check what we found'), h('span', null, 'Fix the name or anything that looks wrong.')),
+      h('li', null, h('strong', null, 'Get your security plan'), h('span', null, 'A checklist to work through and a prompt for your AI coding tool.')),
+    ),
+    h('h2', null, 'How do you want to tell us about your app?'),
     choiceCards(
       'How to describe your app',
       [
@@ -401,21 +413,62 @@ function startPanel(rerender: () => void): HTMLElement {
   );
 }
 
-/** Platforms and parts of the app the last zip, folder or description turned on. */
-function filledSummary(): HTMLElement | null {
-  if (!filledFrom || !detection) return null;
+/** The parts of the app the answers turn on, by name. */
+function foundParts(): string[] {
   const names = new Map(store.catalog!.components.map((c) => [c.id, c.name]));
-  const parts = [...new Set(detection.detection.components.map((c) => names.get(c.type) ?? c.type))];
-  const platforms = detection.detection.platforms.map((p) => PLATFORM_LABELS[p]);
+  return [...new Set(draft!.components.map((c) => names.get(c.type) ?? c.type))];
+}
+
+const chips = (items: string[]) => h('div', { class: 'found-chips' }, items.map((t) => h('span', { class: 'chip' }, icon('check'), t)));
+
+/**
+ * After a zip, folder or description filled in the answers: a short summary to confirm, with the app name and
+ * the save button, so nobody has to go through the questions unless they want to.
+ */
+function resultCard(rerender: () => void): HTMLElement | null {
+  if (!filledFrom || !draft) return null;
+  const d = draft;
+  const p = lastPreview;
+  const sensitivity = { low: 'Low', medium: 'Medium', high: 'High' }[d.data_sensitivity];
+  return h(
+    'section',
+    { class: 'result-card', id: 'describe-result' },
+    h('h2', null, icon('checkCircle'), filledFrom === 'project' ? 'Here is what we found in your project' : 'Here is what we found in your description'),
+    h(
+      'div',
+      { class: 'field' },
+      h('label', { class: 'field-label', for: 'result-name' }, 'App name'),
+      h('input', { id: 'result-name', class: 'input input-lg', type: 'text', value: d.name, placeholder: 'e.g. my-shop', oninput: (e: Event) => {
+        d.name = (e.target as HTMLInputElement).value;
+        dirty = true;
+        issues = [];
+      } }),
+    ),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Runs on'), chips(d.platforms.map((pl) => PLATFORM_LABELS[pl]))),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Your app has'), chips(foundParts())),
+    h('p', { class: 'muted' }, `Most sensitive data: ${sensitivity} · Security level ${d.assurance_level} of 3`, p?.valid ? ` · ${plural(p.controls!, 'security check')} in your plan` : ''),
+    issues.length > 0 ? callout('error', 'Please fix these first', h('ul', null, issues.map((i) => h('li', null, i)))) : null,
+    h(
+      'div',
+      { class: 'start-actions' },
+      button('Save and get my security plan', { kind: 'primary', icon: 'chevron', onClick: (b) => void save(b, true, rerender) }),
+      button('Check or change the answers', { kind: 'secondary', icon: 'edit', onClick: () => {
+        startMode = 'manual';
+        rerender();
+        scrollToForm();
+      } }),
+    ),
+    h('p', { class: 'muted small' }, 'Something missing or wrong? Choose “Check or change the answers” to see every question.'),
+  );
+}
+
+/** Above the questions, after a zip, folder or description filled them in. */
+function filledSummary(): HTMLElement | null {
+  if (!filledFrom || !draft) return null;
   return callout(
     'ok',
     filledFrom === 'project' ? 'Filled in from your project' : 'Filled in from your description',
-    h(
-      'div',
-      null,
-      h('p', null, `Runs on: ${platforms.join(', ') || '—'}. Parts found: ${parts.join(', ') || '—'}.`),
-      h('p', null, 'Check every answer below and turn on anything that was missed — your security plan is built from these answers when you save.'),
-    ),
+    `Runs on ${draft.platforms.map((pl) => PLATFORM_LABELS[pl]).join(', ')}. Found: ${foundParts().join(', ')}. Check the answers below, then save.`,
   );
 }
 
@@ -508,10 +561,14 @@ export function describeView(rerender: () => void): HTMLElement {
     rerender();
   };
 
+  // On the website the questions only show for "Answer the questions"; a zip or description gets a summary instead.
+  const showForm = !isHosted() || currentMode() === 'manual';
+  // The name changes nothing else on the form, so it never re-renders it: a re-render when the field loses focus
+  // would swallow the click that moved the focus.
   const nameInput = h('input', { class: 'input input-lg', type: 'text', value: d.name, 'aria-label': 'App name', placeholder: 'my-app', oninput: (e: Event) => {
     d.name = (e.target as HTMLInputElement).value;
     dirty = true;
-  }, onchange: update });
+  } });
 
   container.append(
     ...[
@@ -522,7 +579,7 @@ export function describeView(rerender: () => void): HTMLElement {
         'div',
         null,
         h('h1', null, 'Describe your app'),
-        h('p', { class: 'lead' }, isHosted() ? 'Security Kit tailors your security plan to your answers. Start from your project files, a description, or the questions — then check the answers and save.' : 'Security Kit tailors the plan to your answers. We filled in what we could detect — check it and adjust.'),
+        h('p', { class: 'lead' }, isHosted() ? 'Tell Security Kit what your app does, and it builds a security plan that fits it. It takes about two minutes, and everything stays in your browser.' : 'Security Kit tailors the plan to your answers. We filled in what we could detect — check it and adjust.'),
       ),
       isHosted()
         ? null
@@ -536,9 +593,9 @@ export function describeView(rerender: () => void): HTMLElement {
           ),
     ),
     isHosted() ? startPanel(rerender) : null,
-    filledSummary(),
-    store.state!.manifestError ? callout('warn', isHosted() ? 'Your saved answers have problems' : 'Your current seckit.yaml has problems', 'Saving this form will replace them with valid answers.') : null,
-    withId('describe-form', section(
+    showForm ? filledSummary() : resultCard(rerender),
+    !showForm ? null : store.state!.manifestError ? callout('warn', isHosted() ? 'Your saved answers have problems' : 'Your current seckit.yaml has problems', 'Saving this form will replace them with valid answers.') : null,
+    !showForm ? null : withId('describe-form', section(
       1,
       'About your app',
       'The basics decide which parts of the security plan apply.',
@@ -567,7 +624,7 @@ export function describeView(rerender: () => void): HTMLElement {
         update();
       }, false), h('p', { class: 'muted small' }, 'Based on OWASP ASVS levels. Most apps with user accounts should use level 2.')),
     )),
-    showApp || !showCloud
+    showForm && (showApp || !showCloud)
       ? section(
           2,
           'What your app has',
@@ -575,7 +632,7 @@ export function describeView(rerender: () => void): HTMLElement {
           appComponents.map((c) => componentCard(c, rerender)),
         )
       : null,
-    showCloud
+    showForm && showCloud
       ? section(
           showApp ? 3 : 2,
           cloudOnly ? 'Your AWS account and services' : 'Where it runs in the cloud (AWS)',
@@ -583,7 +640,7 @@ export function describeView(rerender: () => void): HTMLElement {
           cloudComponents.map((c) => componentCard(c, rerender)),
         )
       : null,
-    section(
+    !showForm ? null : section(
       showApp && showCloud ? 4 : 3,
       'AI coding assistants',
       'Security Kit writes its rules into the instruction files these assistants read, so AI-written code follows your plan.',
@@ -592,12 +649,12 @@ export function describeView(rerender: () => void): HTMLElement {
         update();
       }, true),
     ),
-    issues.length > 0 ? callout('error', 'Please fix these first', h('ul', null, issues.map((i) => h('li', null, i)))) : null,
+    showForm && issues.length > 0 ? callout('error', 'Please fix these first', h('ul', null, issues.map((i) => h('li', null, i)))) : null,
     ].filter((el): el is HTMLElement => el !== null),
   );
 
   const p = lastPreview;
-  container.append(
+  if (showForm) container.append(
     h(
       'div',
       { class: 'sticky-bar' },

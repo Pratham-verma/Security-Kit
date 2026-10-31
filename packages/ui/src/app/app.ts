@@ -265,7 +265,6 @@ export function render(): void {
   main.replaceChildren(view);
   if (id !== lastRoute) {
     window.scrollTo(0, 0);
-    document.title = `${ROUTES.find((r) => r.id === id)!.label} · Security Kit`;
     lastRoute = id;
   }
 }

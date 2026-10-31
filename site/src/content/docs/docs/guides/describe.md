@@ -8,8 +8,10 @@ Security Kit builds your plan from a short description of your app, saved as `se
 
 ## Three ways to start
 
-In the browser app, choose how to describe your app. Each way fills in the same questions; you check the answers,
-save, and the security plan is built from them.
+In the browser app, choose how to describe your app. With a zip or a description, Security Kit shows what it
+found — where the app runs and which parts it has — with the app name to confirm. Press **Save and get my security
+plan**, or **Check or change the answers** to see every question. The questions themselves only appear when you
+choose to answer them.
 
 1. **Use your project files** (recommended) — choose a `.zip` of your project, or drop it on the page. You can also
    pick the folder instead. The zip is opened in your browser and never uploaded; only dependency, config and

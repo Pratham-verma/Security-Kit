@@ -32,7 +32,7 @@ mkdirSync(here('../dist/hosted/js'), { recursive: true });
 cpSync(here('../public/styles.css'), here('../dist/hosted/styles.css'));
 cpSync(here('../public/favicon.svg'), here('../dist/hosted/favicon.svg'));
 const html = readFileSync(here('../public/index.html'), 'utf8')
-  .replace('<title>Security Kit</title>', '<title>Security Kit — app</title>\n  <meta name="description" content="Describe your app and get a tailored security checklist and AI prompt. Runs in your browser.">')
+  .replace('<title>Security Kit</title>', '<title>Security Kit</title>\n  <meta name="description" content="Describe your app and get a tailored security checklist and AI prompt. Runs in your browser.">')
   .replace('href="/favicon.svg"', 'href="./favicon.svg"')
   .replace('href="/styles.css"', 'href="./styles.css"')
   .replace('src="/js/main.js"', 'src="./js/app.js"');

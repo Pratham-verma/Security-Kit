@@ -21,3 +21,8 @@
 .badge-sev.high { background: #ffedd5; color: #c2410c; }
 .badge-sev.medium { background: #fef6d8; color: #a16207; }
 .badge-sev.low { background: #eef1f5; color: #475569; }
+
+/* Large monitors: grow the base size so the docs keep their proportions (Starlight sizes everything in rem). */
+@media (min-width: 1700px) { :root { font-size: 106.25%; } }
+@media (min-width: 1900px) { :root { font-size: 112.5%; } }
+@media (min-width: 2400px) { :root { font-size: 131.25%; } }

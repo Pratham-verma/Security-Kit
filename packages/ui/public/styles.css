@@ -390,7 +390,8 @@ textarea.input { resize: vertical; }
 /* Toasts only inform: let clicks through, and keep them clear of the save bar's buttons. */
 .toasts { pointer-events: none; }
 body:has(.sticky-bar) .toasts { bottom: 100px; }
-@media (max-width: 880px) { body:has(.sticky-bar) .toasts { bottom: 150px; left: 16px; right: 16px; } }
+/* Phones and tablets: toasts at the top, clear of the save bar and of the buttons people just pressed. */
+@media (max-width: 880px) { .toasts, body:has(.sticky-bar) .toasts { top: 12px; bottom: auto; left: 16px; right: 16px; } }
 .toast { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--text); color: var(--surface); box-shadow: var(--shadow-lg); max-width: 420px; animation: toast-in 0.2s ease-out; transition: opacity 0.3s, transform 0.3s; }
 .toast.leaving { opacity: 0; transform: translateY(6px); }
 .toast-ok .icon { color: #4ade80; }
@@ -530,11 +531,12 @@ body:has(.sticky-bar) .toasts { bottom: 100px; }
 @media (max-width: 700px) { .local-step { flex-direction: column; gap: 10px; } }
 
 /* ——— display size: scale with the screen ——— */
-/* Base text grows from ~14px on small laptops to 16px on large monitors; rem-based sizes follow. */
-html { font-size: clamp(14px, 0.45vw + 8.5px, 16px); }
+/* Base text grows from ~14px on small laptops to ~17px at 1920px and 20px on 2560px monitors; rem-based sizes
+   and the rem-based layout widths below follow, so big screens keep the same proportions instead of empty space. */
+html { font-size: clamp(14px, 0.45vw + 8.5px, 20px); }
 body { font-size: 1rem; }
-.app { grid-template-columns: clamp(220px, 17vw, 268px) minmax(0, 1fr); }
-.main { max-width: min(1320px, 100%); margin: 0 auto; padding: clamp(18px, 2.4vw, 32px) clamp(16px, 3vw, 44px) 120px; }
+.app { grid-template-columns: clamp(220px, 17vw, 17rem) minmax(0, 1fr); }
+.main { max-width: min(82.5rem, 100%); margin: 0 auto; padding: clamp(18px, 2.4vw, 32px) clamp(16px, 3vw, 44px) 120px; }
 h1 { font-size: clamp(1.45rem, 1.1rem + 0.8vw, 1.85rem); }
 .page-head { margin-bottom: 16px; }
 .lead { font-size: 1rem; }
@@ -546,8 +548,8 @@ h1 { font-size: clamp(1.45rem, 1.1rem + 0.8vw, 1.85rem); }
 .hero h1 { font-size: clamp(1.8rem, 1.2rem + 2vw, 2.5rem); }
 .hero-icon { width: 60px; height: 60px; }
 .kit-card { padding: clamp(18px, 2vw, 28px); }
-.sticky-bar { left: calc(clamp(220px, 17vw, 268px) + clamp(16px, 3vw, 44px)); right: clamp(16px, 3vw, 44px); max-width: 1232px; margin: 0 auto; }
-@media (min-width: 1700px) { .main { max-width: 1440px; } .sticky-bar { max-width: 1352px; } }
+.sticky-bar { left: calc(clamp(220px, 17vw, 17rem) + clamp(16px, 3vw, 44px)); right: clamp(16px, 3vw, 44px); max-width: 77rem; margin: 0 auto; }
+@media (min-width: 1700px) { .main { max-width: 90rem; } .sticky-bar { max-width: 84.5rem; } }
 @media (max-width: 880px) { .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; } .sticky-bar { left: 16px; right: 16px; } }
 
 /* ——— session banner (restart / update) ——— */
@@ -665,9 +667,29 @@ html { scroll-behavior: smooth; }
 .start h2 { font-size: 1.05rem; margin: 0 0 12px; }
 .start-panel { margin-top: 14px; padding: 16px; border: 1.5px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); }
 .start-panel p { margin: 0 0 12px; }
+.start-panel > p:last-child { margin-bottom: 0; }
 .start-panel.drag { border-color: var(--primary); background: var(--primary-soft); }
 .start-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .start-note { display: flex; align-items: flex-start; gap: 6px; margin: 0 !important; }
 .start-note .icon { width: 14px; height: 14px; flex: none; margin-top: 3px; color: var(--ok); }
 .textarea { min-height: 140px; resize: vertical; line-height: 1.5; margin-bottom: 8px; }
 @media (max-width: 560px) { .start { padding: 14px; } .start-actions .btn { flex: 1 1 100%; } }
+.how-steps { list-style: none; counter-reset: how; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 0; margin: 0 0 18px; }
+.how-steps li { counter-increment: how; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: start; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--primary-soft); }
+.how-steps li::before { content: counter(how); grid-row: span 2; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--primary); color: var(--primary-text); font-weight: 700; font-size: 0.85rem; }
+.how-steps strong { font-size: 0.95rem; }
+.how-steps span { color: var(--text-2); font-size: 0.85rem; }
+.result-card { background: var(--surface); border: 1.5px solid var(--primary); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 18px; scroll-margin-top: 16px; }
+.result-card h2 { display: flex; align-items: center; gap: 8px; font-size: 1.1rem; margin: 0 0 14px; }
+.result-card h2 .icon { color: var(--ok); width: 22px; height: 22px; flex: none; }
+.result-card .field { margin-bottom: 14px; }
+.found-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.found-chips .chip { font-size: 0.88rem; padding: 4px 10px; margin: 0; background: var(--ok-soft); color: var(--text); }
+.found-chips .chip .icon { color: var(--ok); }
+@media (max-width: 560px) {
+  .result-card { padding: 14px; }
+  .how-steps { gap: 6px; }
+  .how-steps li { padding: 8px 10px; align-items: center; }
+  .how-steps li::before { grid-row: auto; }
+  .how-steps span { display: none; }
+}

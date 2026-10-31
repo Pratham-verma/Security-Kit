@@ -192,6 +192,28 @@ any code, configuration or cloud resource while testing.
    - The failing items, most severe first, with the fix you recommend (do not apply it).
    - How to run the tests you wrote.`;
 
+// Security changes must not break the app: the controls below are the ones that most often block real users
+// when applied naively, so the prompt says how to roll each one out compatibly.
+const KEEP_WORKING = `## Keep the app working
+
+Security changes must not break what the application does today.
+
+- **Before changing anything**, find how to build and test the project and run the existing tests. Note any that
+  already fail, so you do not mistake them for your own breakage.
+- **Keep behaviour stable:** existing features, routes, API request and response formats, stored data and user
+  flows keep working. Do not rename or remove public endpoints, fields or settings to fix an item.
+- **Roll out protections that can block real users compatibly:**
+  - Content-Security-Policy: allow every script, style, font, image and API origin the app really uses; if unsure,
+    ship it in report-only mode first.
+  - CORS: allow every origin the app's own web and mobile clients use.
+  - Rate limits and request or upload size limits: set them well above normal use and return a clear error.
+  - Password policy: apply new rules when a password is set or changed; never lock out existing users.
+  - Password hashing: upgrade old hashes when each user next signs in, instead of invalidating them.
+  - Sessions and tokens: do not sign every user out unless the item requires it.
+  - Encryption at rest and new database constraints: migrate existing data so it stays readable.
+- **After each fix**, build and run the tests again. If a fix would change behaviour users rely on, do not apply
+  it — list it under "Needs a decision" with the trade-off.`;
+
 const CLOUD_NOTE = `## Cloud checks
 
 Some items cover the app's AWS account and services. Check them in the infrastructure code first (Terraform,
@@ -227,6 +249,7 @@ export function renderAiPrompt(plan: ResolvedPlan, manifest: Manifest, opts: { m
     '',
     { audit: AUDIT_STEPS, build: BUILD_STEPS, test: TEST_STEPS }[mode],
     '',
+    ...(mode === 'test' ? [] : [KEEP_WORKING, '']),
     ...(cloud ? [CLOUD_NOTE, ''] : []),
     `## Security checklist — ${list.total} items${scope}`,
     '',

@@ -3,6 +3,7 @@ export * from './types.js';
 export { type Attestation, type AttestationsFile, type AttestationStatus, parseAttestations, validateAttestations } from './attestations.js';
 export { type Choice, AI_CHOICES, defaultStandards, LEVEL_CHOICES, manifestFromDetection, PLATFORM_CHOICES, SENSITIVITY_CHOICES } from './choices.js';
 export { type DetectedComponent, type Detection, detect, ENGINE_KIND, type FileSource } from './detect.js';
+export { detectFromText, MAX_DESCRIPTION_LENGTH, type TextDetection } from './describe-text.js';
 export { buildKnowledgeBase } from './kb.js';
 export { parseManifest, validateManifest } from './manifest.js';
 export { renderManifestYaml, unansweredOptions } from './manifest-yaml.js';

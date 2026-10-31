@@ -1,5 +1,5 @@
 {
-  "generator": "seckit 0.0.1",
+  "generator": "seckit 0.1.0",
   "app": {
     "name": "shop-app",
     "platforms": [

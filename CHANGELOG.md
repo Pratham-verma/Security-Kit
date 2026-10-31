@@ -7,6 +7,12 @@
   Storage and End User Compute Benchmarks. Every cloud control has AWS CLI **test cases**. AWS is detected from
   Terraform, CloudFormation/SAM, Serverless, CDK, Elastic Beanstalk files and AWS SDK packages; 22 Terraform
   Semgrep rules check the infrastructure code.
+- **Three ways to describe your app** in the hosted app: a `.zip` of the project (read in the browser with
+  size, entry-count and decompression limits, never uploaded), a description in your own words, or the questions.
+  Each fills in the same answers to check before the plan is built.
+- **Keep the app working:** the review and build prompts, and the AI rules, now tell the AI to run the tests before
+  and after, keep features and API formats working, and roll out CSP, CORS, rate limits and password rules
+  compatibly.
 - **"Test my app" prompt mode** (`seckit prompt --mode test`): the AI runs every test case read-only, changes
   nothing and reports PASS / FAIL / N/A / NOT RUN. Test cases also appear in the checklist and the other prompts.
 

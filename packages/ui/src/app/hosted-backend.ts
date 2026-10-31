@@ -5,6 +5,7 @@ import {
   automatedRulesByControl,
   buildChecklist,
   detect,
+  detectFromText,
   type Detection,
   type FileSource,
   loadBundledKnowledgeBase,
@@ -136,6 +137,20 @@ export function hostedBackend(): Backend {
         // nothing recognised
       }
       detection = { detection: found, suggested };
+      return detection;
+    },
+    'POST /api/detect-text': (body) => {
+      const text = String((body as { text?: unknown }).text ?? '').trim();
+      if (!text) throw new UserError('Write a few sentences about your app first.');
+      const read = detectFromText(text);
+      let suggested: Manifest | null = null;
+      try {
+        const m = manifestFromDetection({ ...read.detection, name: read.detection.name ?? '' });
+        suggested = { ...m, app: { ...m.app, data_sensitivity: read.data_sensitivity, assurance_level: read.assurance_level } };
+      } catch {
+        // nothing recognised
+      }
+      detection = { detection: read.detection, suggested };
       return detection;
     },
     'POST /api/preview': (body) => previewView(kb, (body as { manifest?: unknown }).manifest),

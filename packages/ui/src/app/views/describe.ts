@@ -1,5 +1,7 @@
 // "Describe your app": the seckit init wizard as a form. Answers start from seckit.yaml if it exists,
-// otherwise from auto-detection, so most people only confirm and adjust.
+// otherwise from auto-detection, so most people only confirm and adjust. On the website people choose how to
+// start: their project files (a .zip or the folder), a description in their own words, or the questions —
+// each one fills in the same form, which they check before the plan is built from it.
 import { type Child, h, humanize, icon, modal, plural, toast } from '../dom.js';
 
 // Product names that humanize() would get wrong (e.g. "Ec2", "Dynamodb").
@@ -11,10 +13,11 @@ const VALUE_LABELS: Record<string, string> = {
 };
 const label = (v: unknown) => VALUE_LABELS[String(v)] ?? humanize(v);
 import { isHosted } from '../backend.js';
-import { pickProject, pickTextFile } from '../hosted-files.js';
+import { type PickResult, pickProject, pickTextFile, pickZip } from '../hosted-files.js';
 import { api, ApiError, store } from '../store.js';
 import type { CatalogComponent, Detection, Manifest, ManifestComponent, OptionSchema, Platform, Preview } from '../types.js';
 import { busy, button, callout, navigate, PLATFORM_ICONS, PLATFORM_LABELS, severityBadge, SEVERITIES } from '../ui.js';
+import { ZipError } from '../zip.js';
 
 interface Draft {
   name: string;
@@ -37,6 +40,12 @@ let confirmedOverwrite = false;
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let lastPreview: Preview | null = null;
 let issues: string[] = [];
+
+type StartMode = 'files' | 'text' | 'manual';
+let startMode: StartMode | null = null;
+let describeText = '';
+/** What the last zip, folder or description filled in, shown above the form until the answers are saved. */
+let filledFrom: 'project' | 'text' | null = null;
 
 function fromManifest(m: Manifest): Draft {
   return {
@@ -85,19 +94,61 @@ function schedulePreview(rerender: () => void): void {
   }, 300);
 }
 
-async function detectFromFolder(btn: HTMLButtonElement, rerender: () => void): Promise<void> {
-  const picked = await pickProject({ folder: true });
-  if (!picked) return;
+function scrollToForm(): void {
+  requestAnimationFrame(() => document.getElementById('describe-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+
+/** Start the form from what detection found, keeping a name the user already typed. */
+function applyDetection(rerender: () => void): boolean {
+  if (!detection?.suggested) return false;
+  const name = draft?.name.trim();
+  draft = fromManifest(detection.suggested);
+  if (!draft.name && name) draft.name = name;
+  dirty = true;
+  issues = [];
+  lastPreview = null;
+  schedulePreview(rerender);
+  return true;
+}
+
+async function useProject(btn: HTMLButtonElement, rerender: () => void, pick: () => Promise<PickResult | null>): Promise<void> {
   await busy(btn, async () => {
+    let picked: PickResult | null;
+    try {
+      picked = await pick();
+    } catch (e) {
+      if (e instanceof ZipError) {
+        toast(e.message, 'error');
+        return;
+      }
+      throw e;
+    }
+    if (!picked) return;
     detection = await api.post<Detection>('/api/detect', { files: picked.files, folder: picked.folder });
-    const found = detection.detection.components.length;
-    if (detection.suggested) {
-      draft = fromManifest(detection.suggested);
-      lastPreview = null;
-      schedulePreview(rerender);
-      toast(`Found ${plural(found, 'part')} of your app in ${plural(picked.read, 'file')}. Check the answers below.`);
+    if (applyDetection(rerender)) {
+      filledFrom = 'project';
+      toast(`Found ${plural(detection.detection.components.length, 'part')} of your app in ${plural(picked.read, 'file')}. Check the answers below.`);
+      scrollToForm();
     } else {
-      toast('Nothing recognisable in that folder — answer the questions below instead.', 'info');
+      toast('Nothing recognisable in that project. Describe it in your own words, or answer the questions instead.', 'info');
+    }
+    rerender();
+  });
+}
+
+async function useDescription(btn: HTMLButtonElement, rerender: () => void): Promise<void> {
+  if (describeText.trim().split(/\s+/).length < 4) {
+    toast('Write a few sentences about your app first.', 'info');
+    return;
+  }
+  await busy(btn, async () => {
+    detection = await api.post<Detection>('/api/detect-text', { text: describeText });
+    if (applyDetection(rerender)) {
+      filledFrom = 'text';
+      toast(`Found ${plural(detection.detection.components.length, 'part')} of your app in your description. Check the answers below.`);
+      scrollToForm();
+    } else {
+      toast('Could not tell enough from that. Mention how people sign in, what data you store, payments, uploads or AI — or answer the questions.', 'info');
     }
     rerender();
   });
@@ -273,6 +324,106 @@ function componentCard(component: CatalogComponent, rerender: () => void): HTMLE
   );
 }
 
+const EXAMPLE_DESCRIPTION =
+  'e.g. A React web app with a Node.js API and PostgreSQL. Users sign up with email and password or Google. They pay for subscriptions with Stripe and can upload profile photos to S3. There is an AI chatbot that uses OpenAI. It runs on AWS Lambda.';
+
+function startPanel(rerender: () => void): HTMLElement {
+  const mode: StartMode = startMode ?? (store.state!.manifest ? 'manual' : 'files');
+  const choose = (v: StartMode) => {
+    startMode = v;
+    rerender();
+    if (v === 'manual') scrollToForm();
+  };
+  let panel: HTMLElement;
+  if (mode === 'files') {
+    const zipBtn = button('Choose a .zip file', { kind: 'primary', icon: 'file', onClick: (b) => void useProject(b, rerender, () => pickZip()) });
+    panel = h(
+      'div',
+      {
+        class: 'start-panel dropzone',
+        ondragover: (e: Event) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement).classList.add('drag');
+        },
+        ondragleave: (e: Event) => (e.currentTarget as HTMLElement).classList.remove('drag'),
+        ondrop: (e: Event) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement).classList.remove('drag');
+          const file = (e as DragEvent).dataTransfer?.files[0];
+          if (file) void useProject(zipBtn, rerender, () => pickZip(file));
+        },
+      },
+      h('p', null, 'Zip your project folder and choose the .zip, or drop it here. Leaving out ', h('code', null, 'node_modules'), ' and build folders makes it faster.'),
+      h(
+        'div',
+        { class: 'start-actions' },
+        zipBtn,
+        button('Pick the folder instead', { kind: 'secondary', icon: 'folder', onClick: (b) => void useProject(b, rerender, () => pickProject()) }),
+        button('Import seckit.yaml', { kind: 'ghost', icon: 'file', onClick: (b) => void importManifest(b, rerender) }),
+      ),
+      h('p', { class: 'muted small start-note' }, icon('lock'), 'Read here in your browser — nothing is uploaded. Only dependency, config and infrastructure files are opened; .env files never are.'),
+    );
+  } else if (mode === 'text') {
+    panel = h(
+      'div',
+      { class: 'start-panel' },
+      h('textarea', { class: 'input textarea', rows: 6, maxlength: 10000, 'aria-label': 'Describe your app', placeholder: EXAMPLE_DESCRIPTION, value: describeText, oninput: (e: Event) => {
+        describeText = (e.target as HTMLTextAreaElement).value;
+      } }),
+      h('p', { class: 'muted small' }, 'Say what it does and where it runs, how people sign in, what data it stores, and whether it has payments, file uploads or AI features.'),
+      h('div', { class: 'start-actions' }, button('Fill in the answers', { kind: 'primary', icon: 'wand', onClick: (b) => void useDescription(b, rerender) })),
+      h('p', { class: 'muted small start-note' }, icon('lock'), 'Read here in your browser — your description is not sent anywhere.'),
+    );
+  } else {
+    panel = h(
+      'div',
+      { class: 'start-panel' },
+      h('p', null, 'Answer the questions below. Choose “Not sure” when in doubt — the plan then includes every control that could apply.'),
+      h('div', { class: 'start-actions' }, button('Go to the questions', { kind: 'secondary', icon: 'chevron', onClick: scrollToForm })),
+    );
+  }
+  return h(
+    'section',
+    { class: 'start' },
+    h('h2', null, 'How do you want to describe your app?'),
+    choiceCards(
+      'How to describe your app',
+      [
+        { value: 'files' as StartMode, label: 'Use your project files', hint: 'Recommended · a .zip of your project', icon: 'folder' },
+        { value: 'text' as StartMode, label: 'Describe it in your own words', hint: 'A few sentences about what it does', icon: 'pen' },
+        { value: 'manual' as StartMode, label: 'Answer the questions', hint: 'Choose each part yourself', icon: 'list' },
+      ],
+      (v) => v === mode,
+      choose,
+      false,
+    ),
+    panel,
+  );
+}
+
+/** Platforms and parts of the app the last zip, folder or description turned on. */
+function filledSummary(): HTMLElement | null {
+  if (!filledFrom || !detection) return null;
+  const names = new Map(store.catalog!.components.map((c) => [c.id, c.name]));
+  const parts = [...new Set(detection.detection.components.map((c) => names.get(c.type) ?? c.type))];
+  const platforms = detection.detection.platforms.map((p) => PLATFORM_LABELS[p]);
+  return callout(
+    'ok',
+    filledFrom === 'project' ? 'Filled in from your project' : 'Filled in from your description',
+    h(
+      'div',
+      null,
+      h('p', null, `Runs on: ${platforms.join(', ') || '—'}. Parts found: ${parts.join(', ') || '—'}.`),
+      h('p', null, 'Check every answer below and turn on anything that was missed — your security plan is built from these answers when you save.'),
+    ),
+  );
+}
+
+function withId<T extends HTMLElement>(id: string, el: T): T {
+  el.id = id;
+  return el;
+}
+
 function section(num: number, title: string, text: string, ...body: Child[]): HTMLElement {
   return h('section', { class: 'form-section' }, h('div', { class: 'form-section-head' }, h('span', { class: 'section-num' }, String(num)), h('div', null, h('h2', null, title), h('p', { class: 'muted' }, text))), h('div', { class: 'form-section-body' }, body));
 }
@@ -302,6 +453,7 @@ async function save(btn: HTMLButtonElement, thenContinue: boolean, rerender: () 
     }
     issues = [];
     dirty = false;
+    filledFrom = null;
     toast('Saved your answers');
     await store.refresh();
     draft = fromManifest(store.state!.manifest!);
@@ -370,27 +522,23 @@ export function describeView(rerender: () => void): HTMLElement {
         'div',
         null,
         h('h1', null, 'Describe your app'),
-        h('p', { class: 'lead' }, isHosted() ? 'Security Kit tailors your checklist to your answers. Answer the questions, or let it read your project folder to fill them in.' : 'Security Kit tailors the plan to your answers. We filled in what we could detect — check it and adjust.'),
+        h('p', { class: 'lead' }, isHosted() ? 'Security Kit tailors your security plan to your answers. Start from your project files, a description, or the questions — then check the answers and save.' : 'Security Kit tailors the plan to your answers. We filled in what we could detect — check it and adjust.'),
       ),
-      h(
-        'div',
-        { class: 'page-actions' },
-        isHosted()
-          ? [
-              button('Detect from my project', { kind: 'secondary', icon: 'folder', onClick: (b) => void detectFromFolder(b, rerender) }),
-              button('Import seckit.yaml', { kind: 'ghost', icon: 'file', onClick: (b) => void importManifest(b, rerender) }),
-            ]
-          : button('Reset to detected', { kind: 'ghost', icon: 'refresh', onClick: () => {
+      isHosted()
+        ? null
+        : h(
+            'div',
+            { class: 'page-actions' },
+            button('Reset to detected', { kind: 'ghost', icon: 'refresh', onClick: () => {
               draft = detection?.suggested ? fromManifest(detection.suggested) : blankDraft(store.state!.project.name);
               update();
             } }),
-      ),
+          ),
     ),
-    isHosted()
-      ? callout('info', 'Private by design', 'Everything runs in your browser. If you pick your project folder, only dependency and config files are read — here, on your computer. Nothing is uploaded, and .env files are never opened.')
-      : null,
+    isHosted() ? startPanel(rerender) : null,
+    filledSummary(),
     store.state!.manifestError ? callout('warn', isHosted() ? 'Your saved answers have problems' : 'Your current seckit.yaml has problems', 'Saving this form will replace them with valid answers.') : null,
-    section(
+    withId('describe-form', section(
       1,
       'About your app',
       'The basics decide which parts of the security plan apply.',
@@ -418,7 +566,7 @@ export function describeView(rerender: () => void): HTMLElement {
         d.assurance_level = v;
         update();
       }, false), h('p', { class: 'muted small' }, 'Based on OWASP ASVS levels. Most apps with user accounts should use level 2.')),
-    ),
+    )),
     showApp || !showCloud
       ? section(
           2,
@@ -477,4 +625,5 @@ export function resetDescribe(): void {
   draft = null;
   detection = null;
   lastPreview = null;
+  filledFrom = null;
 }
